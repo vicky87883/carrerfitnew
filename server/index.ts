@@ -7,6 +7,7 @@ import multer from "multer";
 import type { AssessmentAnswers, CareerMatch } from "../lib/types.js";
 import { jobs } from "./data/jobs.js";
 import { analyzeResumeWithGroq, hydrateRankedJobs } from "./groq.js";
+import { createInterviewPlan, evaluateInterviewAnswer, interviewResponseSchema, parseInterviewProfile } from "./interview.js";
 import { extractResumeText, ResumeFileError } from "./resume.js";
 import { readStore, writeStore } from "./store.js";
 
@@ -26,6 +27,7 @@ const resumeUpload = multer({
   limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 3 },
 });
 const resumeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many resume analyses. Please try again in a few minutes." } });
+const interviewLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 45, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Interview practice limit reached. Please pause for a few minutes." } });
 
 app.post("/api/resume/analyze", resumeLimiter, resumeUpload.single("resume"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "Choose a PDF or DOCX resume to analyze." });
@@ -38,6 +40,26 @@ app.post("/api/resume/analyze", resumeLimiter, resumeUpload.single("resume"), as
     file: { name: req.file.originalname, type: req.file.mimetype, size: req.file.size, charactersRead: text.length },
     analyzedAt: new Date().toISOString(),
   });
+});
+
+app.post("/api/interview/start", interviewLimiter, resumeUpload.single("resume"), async (req, res) => {
+  const totalQuestions = Math.max(3, Math.min(10, Number(req.body.questionCount) || 5));
+  const requestedRole = String(req.body.targetRole || "").slice(0, 120);
+  let suppliedProfile = null;
+  if (req.body.profile) {
+    try { suppliedProfile = parseInterviewProfile(JSON.parse(String(req.body.profile))); }
+    catch { return res.status(400).json({ message: "The saved resume profile is invalid. Please upload the resume again." }); }
+  }
+  if (!req.file && !suppliedProfile) return res.status(400).json({ message: "Upload a PDF or DOCX resume to begin." });
+  const resumeText = req.file ? await extractResumeText(req.file) : null;
+  const plan = await createInterviewPlan(resumeText, suppliedProfile, requestedRole, totalQuestions);
+  res.status(201).json(plan);
+});
+
+app.post("/api/interview/respond", interviewLimiter, async (req, res) => {
+  const parsed = interviewResponseSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "The interview answer or session data is invalid." });
+  res.json(await evaluateInterviewAnswer(parsed.data));
 });
 
 app.get("/api/jobs", (req, res) => {

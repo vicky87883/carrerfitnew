@@ -12,6 +12,10 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Dashboard with profile readiness, career matches, and weekly actions
 - PDF and DOCX resume parsing (8 MB limit, memory-only processing)
 - Groq-powered structured resume profiling and evidence-based job ranking
+- Resume-aware AI mock interviews with adaptive Groq follow-up questions
+- Spoken interviewer prompts, browser speech-to-text answers, and typed fallback
+- Optional on-device camera coaching for framing, lighting, and movement stability
+- Per-answer coaching plus a final interview scorecard and practice plan
 - Deterministic matching fallback when the AI provider is unavailable
 - Real employer-hosted application links from Lever and Ashby
 - Express REST API with rate limiting, secure headers, upload validation, and configurable persistence
@@ -53,3 +57,5 @@ Copy `.env.example` to `.env` and add the Groq key before starting the API. With
 - Mount `CARRERFIT_DATA_DIR` as a persistent volume for a single-instance deployment.
 - The included JSON store is suitable for a single-instance pilot. Use Postgres and authenticated user ownership before storing multi-user dashboards.
 - Uploaded resumes are parsed from memory and are not written by the application.
+- Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.
+- Camera signals are coaching aids only and must not be used for hiring decisions or sensitive-trait inference.

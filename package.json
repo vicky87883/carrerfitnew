@@ -13,8 +13,9 @@
     "build:api": "tsc -p tsconfig.server.json",
     "start": "node dist/server/production.js",
     "start:api": "node dist/server/index.js",
-    "test": "npm run typecheck && npm run test:matcher",
+    "test": "npm run typecheck && npm run test:matcher && npm run test:interview",
     "test:matcher": "tsx scripts/test-matcher.ts",
+    "test:interview": "tsx scripts/test-interview.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
