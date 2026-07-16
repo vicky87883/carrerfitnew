@@ -136,6 +136,15 @@ export default function InterviewPage() {
 
   async function enableCamera() {
     setCameraError("");
+    const policy = document.permissionsPolicy || document.featurePolicy;
+    if (policy && !policy.allowsFeature("camera")) {
+      setCameraError("Camera access is blocked by this browser window. Open CarrerFit in a normal HTTPS browser tab to use camera coaching.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera access requires HTTPS or localhost in a supported browser. You can continue with voice-only practice.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 } }, audio: false });
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -145,8 +154,9 @@ export default function InterviewPage() {
       window.setTimeout(() => {
         if (videoRef.current) { videoRef.current.srcObject = stream; void videoRef.current.play().catch(() => undefined); }
       }, 50);
-    } catch {
-      setCameraError("Camera access was not available. You can continue with voice-only practice.");
+    } catch (cause) {
+      const denied = cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "SecurityError");
+      setCameraError(denied ? "Camera permission was denied. Allow camera access in your browser settings, then try again." : "Camera access was not available. You can continue with voice-only practice.");
     }
   }
 
@@ -174,6 +184,8 @@ export default function InterviewPage() {
     if (recording) { recognitionRef.current?.stop(); setRecording(false); return; }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return setError("Live speech recognition is not supported in this browser. Type your answer below instead.");
+    const policy = document.permissionsPolicy || document.featurePolicy;
+    if (policy && !policy.allowsFeature("microphone")) return setError("Microphone access is blocked by this browser window. Open CarrerFit in a normal HTTPS browser tab or type your answer.");
     speechSynthesis.cancel(); setSpeaking(false); setError("");
     const recognition = new Recognition();
     recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";

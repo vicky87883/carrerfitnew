@@ -18,6 +18,12 @@ interface SpeechRecognitionConstructor { new(): SpeechRecognition }
 interface FaceDetectionResult { boundingBox: DOMRectReadOnly }
 interface FaceDetector { detect(source: CanvasImageSource): Promise<FaceDetectionResult[]> }
 interface FaceDetectorConstructor { new(options?: { fastMode?: boolean; maxDetectedFaces?: number }): FaceDetector }
+interface PermissionsPolicy { allowsFeature(feature: string, origin?: string): boolean }
+
+interface Document {
+  permissionsPolicy?: PermissionsPolicy;
+  featurePolicy?: PermissionsPolicy;
+}
 
 interface Window {
   SpeechRecognition?: SpeechRecognitionConstructor;
