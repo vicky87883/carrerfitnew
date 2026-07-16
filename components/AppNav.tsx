@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-const links = [["/resume", "AI resume match"], ["/jobs", "Find jobs"], ["/assessment", "Assessment"], ["/dashboard", "Dashboard"]];
+const links = [["/resume", "AI resume match"], ["/interview", "AI interview"], ["/jobs", "Find jobs"], ["/assessment", "Assessment"], ["/dashboard", "Dashboard"]];
 
 export default function AppNav({ light = false }: { light?: boolean }) {
   const pathname = usePathname();
@@ -19,7 +19,7 @@ export default function AppNav({ light = false }: { light?: boolean }) {
       <nav className={open ? "open" : ""}>
         {links.map(([href, label]) => <Link className={pathname === href ? "current" : ""} href={href} key={href} onClick={() => setOpen(false)}>{label}</Link>)}
       </nav>
-      <Link className="navCta" href="/assessment">Get my career matches</Link>
+      <Link className="navCta" href="/interview">Practice interview</Link>
     </header>
   );
 }
