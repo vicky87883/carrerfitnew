@@ -3,7 +3,9 @@ import { createServer } from "node:http";
 import next from "next";
 
 const port = Number(process.env.PORT || 3000);
-const hostname = process.env.HOSTNAME || "0.0.0.0";
+// Hosting platforms set HOSTNAME to a container identifier. Binding to it can
+// make the process restart before it accepts requests; listen on all interfaces.
+const hostname = "0.0.0.0";
 
 async function main() {
   const web = next({ dev: false, dir: process.cwd(), hostname, port });
