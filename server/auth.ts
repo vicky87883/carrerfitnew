@@ -1,23 +1,35 @@
-import { createHash, randomBytes } from "node:crypto";
-import argon2 from "argon2";
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import type { AuthUser } from "./auth-store.js";
 import { createSession, deleteSession, findSessionUser } from "./auth-store.js";
 
 export const SESSION_COOKIE = "carrerfit_session";
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
 let dummyHash: Promise<string> | null = null;
+const SCRYPT_N = 1 << 15;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
 
 export function authRequired() { return /^(1|true|yes)$/i.test(process.env.AUTH_REQUIRED || ""); }
 export function mailConfigured() { return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD && process.env.SMTP_FROM); }
 export function authConfigurationOk() { return (process.env.AUTH_SECRET || "").length >= 32 && mailConfigured(); }
 
 export async function hashPassword(password: string) {
-  return argon2.hash(password, { type: argon2.argon2id, memoryCost: 19_456, timeCost: 2, parallelism: 1, hashLength: 32 });
+  // Node's built-in scrypt is portable across Hostinger's Linux runtime and
+  // avoids native-module startup failures during registration.
+  const salt = randomBytes(16);
+  const derived = await deriveScrypt(password, salt, 32, SCRYPT_N, SCRYPT_R, SCRYPT_P);
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("base64url")}$${derived.toString("base64url")}`;
 }
 export async function passwordMatches(hash: string | null, password: string) {
   try {
-    if (!hash) { dummyHash ||= hashPassword("not-a-real-user-password"); await argon2.verify(await dummyHash, password); return false; }
-    return await argon2.verify(hash, password);
+    if (!hash) { dummyHash ||= hashPassword("not-a-real-user-password"); await verifyScrypt(await dummyHash, password); return false; }
+    if (hash.startsWith("scrypt$")) return await verifyScrypt(hash, password);
+    // Keep existing Argon2id accounts usable when the optional native module is available.
+    if (hash.startsWith("$argon2")) {
+      const { default: argon2 } = await import("argon2");
+      return await argon2.verify(hash, password);
+    }
+    return false;
   } catch { return false; }
 }
 export function passwordPolicy(password: string) {
@@ -70,6 +82,19 @@ export function privateJson(body: unknown, status = 200, headers: HeadersInit = 
 export function appUrl(path: string) { return new URL(path, process.env.APP_URL || process.env.WEB_URL || "http://localhost:3000").toString(); }
 
 function sha256(value: string) { return createHash("sha256").update(value).digest("hex"); }
+async function verifyScrypt(hash: string, password: string) {
+  const [, n, r, p, saltValue, derivedValue] = hash.split("$");
+  if (!n || !r || !p || !saltValue || !derivedValue) return false;
+  const salt = Buffer.from(saltValue, "base64url"); const expected = Buffer.from(derivedValue, "base64url");
+  if (salt.length < 16 || expected.length !== 32) return false;
+  const derived = await deriveScrypt(password, salt, expected.length, Number(n), Number(r), Number(p));
+  return timingSafeEqual(derived, expected);
+}
+function deriveScrypt(password: string, salt: Buffer, keyLength: number, N: number, r: number, p: number) {
+  return new Promise<Buffer>((resolve, reject) => {
+    (scryptCallback as unknown as (password: string, salt: Buffer, keyLength: number, options: object, callback: (error: Error | null, derivedKey: Buffer) => void) => void)(password, salt, keyLength, { N, r, p, maxmem: 64 * 1024 * 1024 }, (error, derived) => error ? reject(error) : resolve(derived));
+  });
+}
 function fingerprint(value: string | null) { if (!value) return null; return sha256(`${process.env.AUTH_SECRET || "local"}:${value}`); }
 function clientIp(request: Request) { return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip"); }
 function readCookie(request: Request, name: string) {
