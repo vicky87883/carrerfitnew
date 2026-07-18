@@ -23,7 +23,7 @@ export default function JobCard({ job, initiallySaved = false }: { job: Job; ini
       <p className="companyName"><Building2 size={16} /> {job.company}</p>
       <div className="jobMeta"><span><MapPin size={15} />{job.location}</span><span><Clock3 size={15} />{job.postedDaysAgo}d ago</span></div>
       <div className="tagRow">{job.skills.slice(0, 3).map((skill) => <span key={skill}>{skill}</span>)}</div>
-      <div className="listingBottom"><div><strong>₹{job.salaryMin}–{job.salaryMax} LPA</strong><small>Market estimate</small></div><span><Link href={`/jobs/${job.id}`}>Fit details</Link><a href={job.applyUrl} target="_blank" rel="noopener noreferrer">Apply <ExternalLink/></a></span></div>
+      <div className="listingBottom"><div><strong>{job.salaryMin > 0 ? `₹${job.salaryMin}–${job.salaryMax} LPA` : "Salary not listed"}</strong><small>{job.salaryMin > 0 ? "Market estimate" : "Check employer listing"}</small></div><span><Link href={`/jobs/${job.id}`}>Fit details</Link><a href={job.applyUrl} target="_blank" rel="noopener noreferrer">Apply <ExternalLink/></a></span></div>
       <small className="jobSource"><Check size={11}/> Verified on {job.source}</small>
     </article>
   );

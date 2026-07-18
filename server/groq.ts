@@ -29,7 +29,7 @@ export async function analyzeResumeWithGroq(resumeText: string, jobs: Job[]) {
   if (!apiKey) return fallbackAnalysis(resumeText, jobs);
 
   const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-  const jobContext = jobs.map(({ id, title, company, level, skills, requirements, description }) => ({ id, title, company, level, skills, requirements, description }));
+  const jobContext = jobs.map(({ id, title, company, level, skills, requirements, description }) => ({ id, title, company, level, skills, requirements, description: description.slice(0, 1200) }));
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

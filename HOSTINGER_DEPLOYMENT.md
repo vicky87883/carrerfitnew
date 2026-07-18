@@ -18,6 +18,9 @@ Required environment variables:
 - `GROQ_API_KEY`: private Groq credential
 - `WEB_URL`: `https://carrerfit.com,https://www.carrerfit.com`
 - `CARRERFIT_DATA_DIR`: a writable persistent directory, such as `./data`
+- `CARRERFIT_DB_PATH`: a writable SQLite path, such as `./data/carrerfit.sqlite`
+- `SCRAPER_ADMIN_TOKEN`: a random secret of at least 16 characters for source management
+- `CRON_SECRET`: a different random secret for scheduled source refreshes
 
 Do not set `API_PORT` or `API_URL` in Hostinger. The production entry point serves the API and Next.js on the single `PORT` provided by Hostinger.
 

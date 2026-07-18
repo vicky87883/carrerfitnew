@@ -19,6 +19,9 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Deterministic matching fallback when the AI provider is unavailable
 - Real employer-hosted application links from Lever and Ashby
 - Express REST API with rate limiting, secure headers, upload validation, and configurable persistence
+- Persistent SQLite job database with duplicate-safe imports and source health tracking
+- Secure job ingestion for public Lever, Greenhouse, Ashby, and JobPosting structured-data pages
+- Protected source-management dashboard with manual refresh and cron-compatible synchronization
 
 ## Run locally
 
@@ -47,6 +50,9 @@ Environment variables:
 - `API_URL`: internal Express URL used by Next.js rewrites
 - `WEB_URL`: comma-separated allowed CORS origins
 - `CARRERFIT_DATA_DIR`: writable directory for local application state
+- `CARRERFIT_DB_PATH`: writable SQLite database path for imported jobs
+- `SCRAPER_ADMIN_TOKEN`: secret used to access `/job-sources` management APIs (minimum 16 characters)
+- `CRON_SECRET`: separate secret for scheduled `POST /api/cron/job-sources` refreshes
 
 Copy `.env.example` to `.env` and add the Groq key before starting the API. Without a key, resume parsing and deterministic ranking still work and the result identifies itself as skills-based.
 
@@ -59,3 +65,5 @@ Copy `.env.example` to `.env` and add the Groq key before starting the API. With
 - Uploaded resumes are parsed from memory and are not written by the application.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.
 - Camera signals are coaching aids only and must not be used for hiring decisions or sensitive-trait inference.
+- Job ingestion accepts HTTPS sources only, blocks private-network targets and unsafe redirects, limits response size, and observes robots.txt for generic pages.
+- Use public job-board URLs and comply with each source site's terms. CarrerFit stores normalized listing facts and always links applications to the original employer page.
