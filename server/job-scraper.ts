@@ -24,7 +24,7 @@ export function identifyJobSource(rawUrl: string, providedName = "") {
 export async function validateJobSourceUrl(rawUrl: string) { await assertPublicUrl(normalizeUrl(rawUrl)); }
 
 export async function scrapeJobSource(source: JobSource) {
-  markSourceRunning(source.id);
+  await markSourceRunning(source.id);
   try {
     await assertPublicUrl(new URL(source.url));
     const jobs = source.type === "Lever" ? await scrapeLever(source)
@@ -32,11 +32,11 @@ export async function scrapeJobSource(source: JobSource) {
       : source.type === "Ashby" ? await scrapeAshby(source)
       : await scrapeStructuredData(source);
     if (!jobs.length) throw new ScrapeError("No public jobs were found. Use a company job-board URL or a page containing JobPosting structured data.", 422);
-    replaceSourceJobs(source, dedupe(jobs).slice(0, MAX_JOBS));
+    await replaceSourceJobs(source, dedupe(jobs).slice(0, MAX_JOBS));
     return { imported: Math.min(dedupe(jobs).length, MAX_JOBS), jobs: dedupe(jobs).slice(0, MAX_JOBS) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The source could not be refreshed.";
-    markSourceFailed(source.id, message);
+    await markSourceFailed(source.id, message);
     throw error;
   }
 }

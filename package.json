@@ -17,6 +17,7 @@
     "test:matcher": "tsx scripts/test-matcher.ts",
     "test:interview": "tsx scripts/test-interview.ts",
     "test:ingestion": "tsx scripts/test-job-ingestion.ts",
+    "migrate:mysql": "tsx scripts/migrate-sqlite-to-mysql.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "lucide-react": "^0.468.0",
     "mammoth": "^1.12.0",
     "multer": "^2.2.0",
+    "mysql2": "^3.23.0",
     "next": "^15.1.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",

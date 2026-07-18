@@ -51,6 +51,10 @@ Environment variables:
 - `WEB_URL`: comma-separated allowed CORS origins
 - `CARRERFIT_DATA_DIR`: writable directory for local application state
 - `CARRERFIT_DB_PATH`: writable SQLite database path for imported jobs
+- `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`: enable MySQL/MariaDB persistence when all are configured
+- `DB_PORT`: MySQL port, defaults to `3306`
+- `DB_SSL`: set to `true` only when the database provider requires TLS
+- `DB_POOL_SIZE`: MySQL connection pool size, defaults to `5`
 - `SCRAPER_ADMIN_TOKEN`: secret used to access `/job-sources` management APIs (minimum 16 characters)
 - `CRON_SECRET`: separate secret for scheduled `POST /api/cron/job-sources` refreshes
 
@@ -60,8 +64,8 @@ Copy `.env.example` to `.env` and add the Groq key before starting the API. With
 
 - Deploy the Next.js and Express processes together or separately with `API_URL` pointing to the private API address.
 - Put the service behind HTTPS and a reverse proxy with request-body limits.
-- Mount `CARRERFIT_DATA_DIR` as a persistent volume for a single-instance deployment.
-- The included JSON store is suitable for a single-instance pilot. Use Postgres and authenticated user ownership before storing multi-user dashboards.
+- SQLite and the local JSON store remain the development fallback. Production can use MySQL/MariaDB for job sources, imported jobs, applications, and assessment state.
+- MySQL schema bootstrap is non-destructive and uses `CREATE TABLE IF NOT EXISTS`. Run `npm run migrate:mysql` once to copy existing SQLite jobs and local state after configuring MySQL.
 - Uploaded resumes are parsed from memory and are not written by the application.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.
 - Camera signals are coaching aids only and must not be used for hiring decisions or sensitive-trait inference.
