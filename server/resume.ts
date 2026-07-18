@@ -10,7 +10,11 @@ export async function extractResumeText(file: Express.Multer.File) {
   const lowerName = file.originalname.toLowerCase();
   let text = "";
   if (PDF_TYPES.has(file.mimetype) || lowerName.endsWith(".pdf")) {
-    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const [{ getDocument }, pdfjsWorker] = await Promise.all([
+      import("pdfjs-dist/legacy/build/pdf.mjs"),
+      import("pdfjs-dist/legacy/build/pdf.worker.mjs"),
+    ]);
+    (globalThis as typeof globalThis & { pdfjsWorker?: typeof pdfjsWorker }).pdfjsWorker = pdfjsWorker;
     const document = await getDocument({ data: new Uint8Array(file.buffer), useSystemFonts: true }).promise;
     const pages: string[] = [];
     for (let pageNumber = 1; pageNumber <= Math.min(document.numPages, 30); pageNumber += 1) {

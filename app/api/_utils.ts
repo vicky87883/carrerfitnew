@@ -36,6 +36,19 @@ export async function resumeFileFromForm(value: FormDataEntryValue | null) {
 
 export function apiFailure(error: unknown) {
   if (error instanceof ResumeFileError) return Response.json({ message: error.message }, { status: error.status });
+  const reason = databaseErrorReason(error);
+  if (reason) return Response.json({ message: "The production database is temporarily unavailable.", code: reason }, { status: 503 });
   console.error("Next API route failed", error);
   return Response.json({ message: "Something went wrong. Please try again." }, { status: 500 });
+}
+
+export function databaseErrorReason(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  if (code === "ER_ACCESS_DENIED_ERROR") return "access_denied";
+  if (code === "ER_BAD_DB_ERROR") return "database_not_found";
+  if (code === "ECONNREFUSED") return "connection_refused";
+  if (code === "ETIMEDOUT" || code === "PROTOCOL_SEQUENCE_TIMEOUT") return "timeout";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "dns_error";
+  if (code.startsWith("ER_") || code === "PROTOCOL_CONNECTION_LOST") return "database_error";
+  return null;
 }
