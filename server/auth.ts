@@ -61,7 +61,7 @@ export async function requireAdminUser(request: Request, requireMfa = true) {
   if (result.response || !result.user) return result;
   if (!isAdminEmail(result.user.email)) return { user: null, response: privateJson({ message: "Administrator access is required." }, 403) };
   const session = result.user as SessionUser;
-  if (requireMfa && !session.mfaVerifiedAt) return { user: session, response: privateJson({ message: "Authenticator verification is required.", code: "mfa_required" }, 403) };
+  if (requireMfa && !session.mfaVerifiedAt) return { user: session, response: privateJson({ message: "Administrator password is required.", code: "admin_password_required" }, 403) };
   return { user: session, response: null };
 }
 
