@@ -42,6 +42,25 @@ export type JobSourceOverview = {
   recentJobs: Job[];
 };
 
+export type BlogPost = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  category: string;
+  tags: string[];
+  authorName: string;
+  seoTitle: string;
+  seoDescription: string;
+  featured: boolean;
+  status: "Draft" | "Published";
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  readingMinutes: number;
+};
+
 export type ResumeProfile = {
   name: string;
   headline: string;
@@ -69,6 +88,7 @@ export type ResumeMatchResult = {
   aiPowered: boolean;
   file: { name: string; type: string; size: number; charactersRead: number };
   analyzedAt: string;
+  storedForAccount?: boolean;
 };
 
 export type InterviewQuestion = {
@@ -154,6 +174,8 @@ export type Application = {
 
 export type DashboardData = {
   profile: { name: string; email: string; completion: number };
+  resumeProfile?: ResumeProfile | null;
+  resumeJobs?: RankedJob[];
   matches: CareerMatch[];
   applications: (Application & { job: Job })[];
   stats: { saved: number; applied: number; interviews: number; readiness: number };

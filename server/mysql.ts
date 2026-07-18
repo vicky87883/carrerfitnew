@@ -98,6 +98,77 @@ async function ensureMysqlSchema(target: Pool) {
         payload LONGTEXT NOT NULL,
         updated_at DATETIME(3) NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(36) PRIMARY KEY,
+        email VARCHAR(254) NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        email_verified_at DATETIME(3) NULL,
+        failed_login_count INT UNSIGNED NOT NULL DEFAULT 0,
+        locked_until DATETIME(3) NULL,
+        last_login_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
+        token_hash CHAR(64) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        expires_at DATETIME(3) NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        last_seen_at DATETIME(3) NOT NULL,
+        user_agent_hash CHAR(64) NULL,
+        ip_hash CHAR(64) NULL,
+        KEY auth_sessions_user_idx (user_id),
+        KEY auth_sessions_expiry_idx (expires_at),
+        CONSTRAINT auth_sessions_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS auth_tokens (
+        token_hash CHAR(64) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        purpose VARCHAR(32) NOT NULL,
+        expires_at DATETIME(3) NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        KEY auth_tokens_user_purpose_idx (user_id, purpose),
+        KEY auth_tokens_expiry_idx (expires_at),
+        CONSTRAINT auth_tokens_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS user_private_data (
+        user_id VARCHAR(36) PRIMARY KEY,
+        resume_profile LONGTEXT NULL,
+        resume_jobs LONGTEXT NULL,
+        assessment_matches LONGTEXT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        CONSTRAINT user_private_data_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS user_applications (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        job_id VARCHAR(80) NOT NULL,
+        status VARCHAR(20) NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        UNIQUE KEY user_applications_job_uq (user_id, job_id),
+        KEY user_applications_user_idx (user_id),
+        CONSTRAINT user_applications_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS blog_posts (
+        id VARCHAR(36) PRIMARY KEY,
+        slug VARCHAR(160) NOT NULL UNIQUE,
+        title VARCHAR(180) NOT NULL,
+        excerpt VARCHAR(400) NOT NULL,
+        content LONGTEXT NOT NULL,
+        category VARCHAR(80) NOT NULL,
+        tags LONGTEXT NOT NULL,
+        author_name VARCHAR(100) NOT NULL,
+        seo_title VARCHAR(180) NOT NULL,
+        seo_description VARCHAR(400) NOT NULL,
+        featured TINYINT(1) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+        published_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        KEY blog_posts_status_date_idx (status, published_at),
+        KEY blog_posts_category_idx (category)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     } finally {
       connection.release();
     }

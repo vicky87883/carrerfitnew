@@ -6,6 +6,10 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ message: "Request failed" }));
+    if (response.status === 401 && typeof window !== "undefined" && body.code === "authentication_required") {
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+    }
     throw new Error(body.message || "Request failed");
   }
   if (response.status === 204) return undefined as T;
