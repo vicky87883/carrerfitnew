@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import type { AuthUser } from "./auth-store.js";
-import { createSession, deleteSession, findSessionUser } from "./auth-store.js";
+import type { AuthUser, SessionUser } from "./auth-store.js";
+import { createSession, deleteSession, findSessionUser, setSessionMfaVerified } from "./auth-store.js";
+import { isAdminEmail } from "./admin-mfa.js";
 
 export const SESSION_COOKIE = "carrerfit_session";
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
@@ -55,6 +56,14 @@ export async function requireVerifiedUser(request: Request) {
   if (!user.emailVerifiedAt) return { user: null, response: privateJson({ message: "Confirm your email address to continue.", code: "email_verification_required" }, 403) };
   return { user, response: null };
 }
+export async function requireAdminUser(request: Request, requireMfa = true) {
+  const result = await requireVerifiedUser(request);
+  if (result.response || !result.user) return result;
+  if (!isAdminEmail(result.user.email)) return { user: null, response: privateJson({ message: "Administrator access is required." }, 403) };
+  const session = result.user as SessionUser;
+  if (requireMfa && !session.mfaVerifiedAt) return { user: session, response: privateJson({ message: "Authenticator verification is required.", code: "mfa_required" }, 403) };
+  return { user: session, response: null };
+}
 
 export async function issueSession(request: Request, userId: string) {
   const raw = randomBytes(32).toString("base64url"); const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000).toISOString();
@@ -62,6 +71,7 @@ export async function issueSession(request: Request, userId: string) {
   return { raw, cookie: sessionCookie(raw, SESSION_SECONDS) };
 }
 export async function revokeRequestSession(request: Request) { const raw = readCookie(request, SESSION_COOKIE); if (raw) await deleteSession(sha256(raw)); }
+export async function markRequestMfaVerified(request: Request) { const raw = readCookie(request, SESSION_COOKIE); if (!raw) return false; await setSessionMfaVerified(sha256(raw)); return true; }
 export function clearSessionCookie() { return sessionCookie("", 0); }
 export function sessionCookie(value: string, maxAge: number) {
   const secure = process.env.NODE_ENV === "production" || (process.env.APP_URL || "").startsWith("https://");

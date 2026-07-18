@@ -8,6 +8,7 @@ export type AuthUser = {
   id: string; email: string; name: string; passwordHash: string; emailVerifiedAt: string | null;
   failedLoginCount: number; lockedUntil: string | null; createdAt: string;
 };
+export type SessionUser = AuthUser & { mfaVerifiedAt: string | null };
 export type PrivateData = { resumeProfile: ResumeProfile | null; resumeJobs: RankedJob[]; assessmentMatches: CareerMatch[] };
 
 type UserRow = RowDataPacket & {
@@ -25,10 +26,14 @@ export function ensureSqliteAuthSchema() {
     CREATE TABLE IF NOT EXISTS auth_sessions (
       token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
-      user_agent_hash TEXT, ip_hash TEXT
+      user_agent_hash TEXT, ip_hash TEXT, mfa_verified_at TEXT
     );
     CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
+    CREATE TABLE IF NOT EXISTS admin_mfa (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      secret_ciphertext TEXT NOT NULL, enabled_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS auth_tokens (
       token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       purpose TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL
@@ -140,19 +145,38 @@ export async function consumeAuthToken(tokenHash: string, purpose: "verify_email
 
 export async function createSession(input: { tokenHash: string; userId: string; expiresAt: string; userAgentHash: string | null; ipHash: string | null }) {
   const now = new Date().toISOString();
-  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("INSERT INTO auth_sessions (token_hash,user_id,expires_at,created_at,last_seen_at,user_agent_hash,ip_hash) VALUES (?,?,?,?,?,?,?)", [input.tokenHash, input.userId, mysqlDate(input.expiresAt), mysqlDate(now), mysqlDate(now), input.userAgentHash, input.ipHash]);
-  else { ensureSqliteAuthSchema(); getSqliteJobDatabase().prepare("INSERT INTO auth_sessions VALUES (?,?,?,?,?,?,?)").run(input.tokenHash, input.userId, input.expiresAt, now, now, input.userAgentHash, input.ipHash); }
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("INSERT INTO auth_sessions (token_hash,user_id,expires_at,created_at,last_seen_at,user_agent_hash,ip_hash,mfa_verified_at) VALUES (?,?,?,?,?,?,?,NULL)", [input.tokenHash, input.userId, mysqlDate(input.expiresAt), mysqlDate(now), mysqlDate(now), input.userAgentHash, input.ipHash]);
+  else { ensureSqliteAuthSchema(); getSqliteJobDatabase().prepare("INSERT INTO auth_sessions (token_hash,user_id,expires_at,created_at,last_seen_at,user_agent_hash,ip_hash,mfa_verified_at) VALUES (?,?,?,?,?,?,?,NULL)").run(input.tokenHash, input.userId, input.expiresAt, now, now, input.userAgentHash, input.ipHash); }
 }
 
 export async function findSessionUser(tokenHash: string) {
-  const query = "SELECT u.* FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? LIMIT 1";
+  const query = "SELECT u.*,s.mfa_verified_at AS session_mfa_verified_at FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? LIMIT 1";
   const now = new Date().toISOString();
   if (databaseBackend() === "mysql") {
     const [rows] = await (await getMysqlPool()).execute<UserRow[]>(query, [tokenHash, mysqlDate(now)]);
-    return rows[0] ? mapUser(rows[0]) : null;
+    return rows[0] ? mapSessionUser(rows[0]) : null;
   }
   ensureSqliteAuthSchema(); const row = getSqliteJobDatabase().prepare(query).get(tokenHash, now) as UserRow | undefined;
-  return row ? mapUser(row) : null;
+  return row ? mapSessionUser(row) : null;
+}
+
+export async function setSessionMfaVerified(tokenHash: string) {
+  const now = new Date().toISOString();
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("UPDATE auth_sessions SET mfa_verified_at=? WHERE token_hash=?", [mysqlDate(now), tokenHash]);
+  else { ensureSqliteAuthSchema(); getSqliteJobDatabase().prepare("UPDATE auth_sessions SET mfa_verified_at=? WHERE token_hash=?").run(now, tokenHash); }
+}
+
+export async function getAdminMfa(userId: string) {
+  const query = "SELECT secret_ciphertext,enabled_at FROM admin_mfa WHERE user_id=? LIMIT 1";
+  let row: { secret_ciphertext: string; enabled_at: string | null } | undefined;
+  if (databaseBackend() === "mysql") { const [rows] = await (await getMysqlPool()).execute<(RowDataPacket & typeof row)[]>(query, [userId]); row = rows[0]; }
+  else { ensureSqliteAuthSchema(); row = getSqliteJobDatabase().prepare(query).get(userId) as typeof row; }
+  return row ? { secretCiphertext: row.secret_ciphertext, enabledAt: row.enabled_at ? iso(row.enabled_at) : null } : null;
+}
+export async function upsertAdminMfa(userId: string, secretCiphertext: string, enabled: boolean) {
+  const now = new Date().toISOString(); const enabledAt = enabled ? now : null;
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("INSERT INTO admin_mfa (user_id,secret_ciphertext,enabled_at,created_at,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE secret_ciphertext=VALUES(secret_ciphertext),enabled_at=VALUES(enabled_at),updated_at=VALUES(updated_at)", [userId, secretCiphertext, enabledAt ? mysqlDate(enabledAt) : null, mysqlDate(now), mysqlDate(now)]);
+  else { ensureSqliteAuthSchema(); getSqliteJobDatabase().prepare("INSERT INTO admin_mfa (user_id,secret_ciphertext,enabled_at,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET secret_ciphertext=excluded.secret_ciphertext,enabled_at=excluded.enabled_at,updated_at=excluded.updated_at").run(userId, secretCiphertext, enabledAt, now, now); }
 }
 
 export async function deleteSession(tokenHash: string) {
@@ -208,6 +232,7 @@ export async function deleteUserApplication(userId: string, id: string) {
 }
 
 function mapUser(row: UserRow): AuthUser { return { id: row.id, email: row.email, name: row.name, passwordHash: row.password_hash, emailVerifiedAt: row.email_verified_at ? iso(row.email_verified_at) : null, failedLoginCount: Number(row.failed_login_count), lockedUntil: row.locked_until ? iso(row.locked_until) : null, createdAt: iso(row.created_at) }; }
+function mapSessionUser(row: UserRow & { session_mfa_verified_at?: string | null }): SessionUser { return { ...mapUser(row), mfaVerifiedAt: row.session_mfa_verified_at ? iso(row.session_mfa_verified_at) : null }; }
 function parseJson<T>(value: string | null | undefined, fallback: T): T { try { return value ? JSON.parse(value) as T : fallback; } catch { return fallback; } }
 function mysqlDate(value: string) { return new Date(value).toISOString().slice(0, 23).replace("T", " "); }
 function iso(value: string) { return value.includes("T") ? value : `${value.replace(" ", "T")}Z`; }

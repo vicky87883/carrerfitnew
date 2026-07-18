@@ -118,9 +118,19 @@ async function ensureMysqlSchema(target: Pool) {
         last_seen_at DATETIME(3) NOT NULL,
         user_agent_hash CHAR(64) NULL,
         ip_hash CHAR(64) NULL,
+        mfa_verified_at DATETIME(3) NULL,
         KEY auth_sessions_user_idx (user_id),
         KEY auth_sessions_expiry_idx (expires_at),
         CONSTRAINT auth_sessions_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query("ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS mfa_verified_at DATETIME(3) NULL");
+      await connection.query(`CREATE TABLE IF NOT EXISTS admin_mfa (
+        user_id VARCHAR(36) PRIMARY KEY,
+        secret_ciphertext TEXT NOT NULL,
+        enabled_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        CONSTRAINT admin_mfa_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS auth_tokens (
         token_hash CHAR(64) PRIMARY KEY,
