@@ -51,6 +51,7 @@ export default function Home() {
           <div className={menuOpen ? "modernLinks isOpen" : "modernLinks"}>
             <Link href="/resume">AI resume match</Link>
             <Link href="/jobs">Explore jobs</Link>
+            <Link href="/blog">Career guides</Link>
             <Link href="/dashboard">My dashboard</Link>
           </div>
           <Link className="modernNavCta" href="/resume">Match my resume <ArrowRight size={15} /></Link>
@@ -127,7 +128,7 @@ export default function Home() {
 
       <section className="modernCta"><div><span className="modernEyebrow"><Sparkles size={14}/> Your next move starts here</span><h2>Know where you fit.<br/>Build what matters.</h2></div><div><p>Upload your resume and get evidence-based matches to verified opportunities.</p><Link href="/resume">Match my resume free <ArrowRight/></Link><small>PDF or DOCX · Secure processing · No credit card</small></div></section>
 
-      <footer className="modernFooter"><Link className="modernBrand" href="/"><span><Target size={20}/></span>CarrerFit.com</Link><p>Career intelligence for better decisions.</p><div><Link href="/resume">Resume match</Link><Link href="/jobs">Jobs</Link><Link href="/assessment">Assessment</Link><Link href="/dashboard">Dashboard</Link></div><span>© 2026 CarrerFit.com</span></footer>
+      <footer className="modernFooter"><Link className="modernBrand" href="/"><span><Target size={20}/></span>CarrerFit.com</Link><p>Career intelligence for better decisions.</p><div><Link href="/resume">Resume match</Link><Link href="/jobs">Jobs</Link><Link href="/blog">Career guides</Link><Link href="/assessment">Assessment</Link><Link href="/dashboard">Dashboard</Link></div><span>© 2026 CarrerFit.com</span></footer>
     </main>
   );
 }

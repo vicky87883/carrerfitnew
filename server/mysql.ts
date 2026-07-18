@@ -150,6 +150,25 @@ async function ensureMysqlSchema(target: Pool) {
         KEY user_applications_user_idx (user_id),
         CONSTRAINT user_applications_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS blog_posts (
+        id VARCHAR(36) PRIMARY KEY,
+        slug VARCHAR(160) NOT NULL UNIQUE,
+        title VARCHAR(180) NOT NULL,
+        excerpt VARCHAR(400) NOT NULL,
+        content LONGTEXT NOT NULL,
+        category VARCHAR(80) NOT NULL,
+        tags LONGTEXT NOT NULL,
+        author_name VARCHAR(100) NOT NULL,
+        seo_title VARCHAR(180) NOT NULL,
+        seo_description VARCHAR(400) NOT NULL,
+        featured TINYINT(1) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+        published_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL,
+        KEY blog_posts_status_date_idx (status, published_at),
+        KEY blog_posts_category_idx (category)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     } finally {
       connection.release();
     }

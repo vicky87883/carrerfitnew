@@ -24,6 +24,8 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Persistent SQLite job database with duplicate-safe imports and source health tracking
 - Secure job ingestion for public Lever, Greenhouse, Ashby, and JobPosting structured-data pages
 - Protected source-management dashboard with manual refresh and cron-compatible synchronization
+- Database-backed career guides with drafts, publishing controls, structured data, sitemap, and RSS
+- Private blog publishing workspace at `/blog-admin`
 
 ## Run locally
 
@@ -59,6 +61,7 @@ Environment variables:
 - `DB_POOL_SIZE`: MySQL connection pool size, defaults to `5`
 - `SCRAPER_ADMIN_TOKEN`: secret used to access `/job-sources` management APIs (minimum 16 characters)
 - `CRON_SECRET`: separate secret for scheduled `POST /api/cron/job-sources` refreshes
+- `BLOG_ADMIN_TOKEN`: separate secret of at least 24 characters used to unlock `/blog-admin`
 - `APP_URL`: public origin used for secure confirmation/reset links, for example `https://carrerfit.com`
 - `AUTH_SECRET`: random secret of at least 32 characters used to protect request fingerprints
 - `AUTH_REQUIRED`: set to `true` only after the SMTP settings below are working
@@ -67,6 +70,16 @@ Environment variables:
 - `SMTP_FROM`: visible sender, for example `CarrerFit.com <no-reply@carrerfit.com>`
 
 Copy `.env.example` to `.env` and add the Groq key before starting the API. Without a key, resume parsing and deterministic ranking still work and the result identifies itself as skills-based.
+
+## Public routes
+
+- `/`, `/resume`, `/interview`, `/jobs`, `/assessment`, `/dashboard`
+- `/register`, `/login`, `/forgot-password`, `/reset-password`
+- `/blog` and `/blog/[slug]`
+- `/sitemap.xml`, `/robots.txt`, `/rss.xml`, `/manifest.webmanifest`
+- `/api/health`
+
+The publishing workspace is available at `/blog-admin` and requires `BLOG_ADMIN_TOKEN`. Draft articles are never included in public blog responses, search metadata, the sitemap, or RSS.
 
 ## Safe authentication rollout
 

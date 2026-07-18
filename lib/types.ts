@@ -42,6 +42,25 @@ export type JobSourceOverview = {
   recentJobs: Job[];
 };
 
+export type BlogPost = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  category: string;
+  tags: string[];
+  authorName: string;
+  seoTitle: string;
+  seoDescription: string;
+  featured: boolean;
+  status: "Draft" | "Published";
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  readingMinutes: number;
+};
+
 export type ResumeProfile = {
   name: string;
   headline: string;

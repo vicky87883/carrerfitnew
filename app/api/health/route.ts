@@ -15,6 +15,7 @@ export async function GET() {
     aiConfigured: Boolean(process.env.GROQ_API_KEY),
     apiMode: "next-route",
     authentication: { required: authRequired(), configured: authConfigurationOk(), emailConfigured: mailConfigured() },
+    blog: { publishingConfigured: Boolean(process.env.BLOG_ADMIN_TOKEN && process.env.BLOG_ADMIN_TOKEN.length >= 24) },
     database,
   }, { headers: { "Cache-Control": "no-store" } });
 }
