@@ -9,7 +9,7 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import AppNav from "../../components/AppNav";
 import { api } from "../../lib/api";
 import type {
-  CameraMetrics, InterviewEvaluation, InterviewQuestion, InterviewReport,
+  CameraMetrics, DashboardData, InterviewEvaluation, InterviewQuestion, InterviewReport,
   InterviewResponseResult, InterviewStartResult, InterviewTurn, ResumeProfile,
 } from "../../lib/types";
 
@@ -53,14 +53,21 @@ export default function InterviewPage() {
   const cameraSamples = useRef({ count: 0, face: 0, brightness: 0, movement: 0, previous: null as Uint8ClampedArray | null });
 
   useEffect(() => {
+    let foundLocalProfile = false;
     try {
       const raw = sessionStorage.getItem("carrerfit_resume_profile");
       if (raw) {
         const profile = JSON.parse(raw) as ResumeProfile;
+        foundLocalProfile = true;
         setSavedProfile(profile);
         setTargetRole(profile.targetRoles[0] || profile.headline);
       }
     } catch { sessionStorage.removeItem("carrerfit_resume_profile"); }
+    if (!foundLocalProfile) api<DashboardData>("/api/dashboard").then((data) => {
+      if (!data.resumeProfile) return;
+      setSavedProfile(data.resumeProfile);
+      setTargetRole(data.resumeProfile.targetRoles[0] || data.resumeProfile.headline);
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {

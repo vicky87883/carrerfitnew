@@ -10,6 +10,8 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Five-step career assessment with generated career matches
 - Saved-job pipeline with editable application statuses
 - Dashboard with profile readiness, career matches, and weekly actions
+- Verified-email accounts with Argon2id passwords, one-time recovery links, and server-side sessions
+- Per-user resume profiles, assessment matches, and saved-job pipelines
 - PDF and DOCX resume parsing (8 MB limit, memory-only processing)
 - Groq-powered structured resume profiling and evidence-based job ranking
 - Resume-aware AI mock interviews with adaptive Groq follow-up questions
@@ -57,16 +59,31 @@ Environment variables:
 - `DB_POOL_SIZE`: MySQL connection pool size, defaults to `5`
 - `SCRAPER_ADMIN_TOKEN`: secret used to access `/job-sources` management APIs (minimum 16 characters)
 - `CRON_SECRET`: separate secret for scheduled `POST /api/cron/job-sources` refreshes
+- `APP_URL`: public origin used for secure confirmation/reset links, for example `https://carrerfit.com`
+- `AUTH_SECRET`: random secret of at least 32 characters used to protect request fingerprints
+- `AUTH_REQUIRED`: set to `true` only after the SMTP settings below are working
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`: SMTP connection (`smtp.hostinger.com`, `465`, `true` for Hostinger)
+- `SMTP_USER`, `SMTP_PASSWORD`: credentials for a real mailbox such as `no-reply@carrerfit.com`
+- `SMTP_FROM`: visible sender, for example `CarrerFit.com <no-reply@carrerfit.com>`
 
 Copy `.env.example` to `.env` and add the Groq key before starting the API. Without a key, resume parsing and deterministic ranking still work and the result identifies itself as skills-based.
 
+## Safe authentication rollout
+
+1. Deploy with `AUTH_REQUIRED=false` and all other authentication/SMTP variables configured.
+2. Open `/api/health` and confirm `authentication.configured` and `authentication.emailConfigured` are `true`.
+3. Register a test account, open the confirmation email, sign in, upload a resume, and confirm its private dashboard data.
+4. Change only `AUTH_REQUIRED=true` and redeploy. Dashboard, assessment, resume analysis, and interview APIs will then require a verified account.
+
 ## Production notes
 
-- Deploy the Next.js and Express processes together or separately with `API_URL` pointing to the private API address.
+- `npm start` serves the Next application and its API from one process. Do not set `API_URL` in this production mode.
 - Put the service behind HTTPS and a reverse proxy with request-body limits.
-- SQLite and the local JSON store remain the development fallback. Production can use MySQL/MariaDB for job sources, imported jobs, applications, and assessment state.
+- SQLite and the local JSON store remain the development fallback. Production uses MySQL/MariaDB for jobs and account-isolated private data.
 - MySQL schema bootstrap is non-destructive and uses `CREATE TABLE IF NOT EXISTS`. Run `npm run migrate:mysql` once to copy existing SQLite jobs and local state after configuring MySQL.
-- Uploaded resumes are parsed from memory and are not written by the application.
+- Uploaded resumes are parsed from memory and are not written by the application. With accounts enabled, only the structured profile and ranked results are retained per user.
+- Session tokens are random, stored only as SHA-256 hashes, and delivered in `HttpOnly`, `SameSite=Lax`, production `Secure` cookies. Passwords use Argon2id.
+- Email verification and password-reset tokens are random, hashed in storage, expire, and can be used only once.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.
 - Camera signals are coaching aids only and must not be used for hiring decisions or sensitive-trait inference.
 - Job ingestion accepts HTTPS sources only, blocks private-network targets and unsafe redirects, limits response size, and observes robots.txt for generic pages.

@@ -69,6 +69,7 @@ export type ResumeMatchResult = {
   aiPowered: boolean;
   file: { name: string; type: string; size: number; charactersRead: number };
   analyzedAt: string;
+  storedForAccount?: boolean;
 };
 
 export type InterviewQuestion = {
@@ -154,6 +155,8 @@ export type Application = {
 
 export type DashboardData = {
   profile: { name: string; email: string; completion: number };
+  resumeProfile?: ResumeProfile | null;
+  resumeJobs?: RankedJob[];
   matches: CareerMatch[];
   applications: (Application & { job: Job })[];
   stats: { saved: number; applied: number; interviews: number; readiness: number };

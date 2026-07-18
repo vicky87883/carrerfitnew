@@ -13,7 +13,9 @@
     "build:api": "tsc -p tsconfig.server.json",
     "start": "node dist/server/production.js",
     "start:api": "node dist/server/index.js",
-    "test": "npm run typecheck && npm run test:matcher && npm run test:interview && npm run test:ingestion",
+    "test": "npm run typecheck && npm run test:auth && npm run test:matcher && npm run test:interview && npm run test:ingestion",
+    "test:auth": "tsx scripts/test-auth.ts",
+    "test:auth-api": "tsx scripts/test-auth-api.ts",
     "test:matcher": "tsx scripts/test-matcher.ts",
     "test:interview": "tsx scripts/test-interview.ts",
     "test:ingestion": "tsx scripts/test-job-ingestion.ts",
@@ -21,6 +23,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
+    "argon2": "^0.44.0",
     "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",
@@ -33,6 +36,7 @@
     "multer": "^2.2.0",
     "mysql2": "^3.23.0",
     "next": "^15.1.0",
+    "nodemailer": "^9.0.3",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -44,12 +48,18 @@
     "@types/express": "^5.0.3",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.10.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "@types/smtp-server": "^3.5.13",
     "concurrently": "^9.2.0",
     "eslint": "^9.17.0",
     "eslint-config-next": "^15.1.0",
+    "smtp-server": "^3.19.2",
     "tsx": "^4.20.3",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "postcss": "8.5.19"
   }
 }

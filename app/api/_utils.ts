@@ -14,9 +14,10 @@ export function rateLimit(request: Request, bucket: string, limit = 45) {
   }
   current.count += 1;
   if (current.count <= limit) return null;
+  const message = bucket.startsWith("auth-") ? "Too many account requests. Please wait a few minutes and try again." : bucket === "resume" ? "Too many resume analyses. Please try again in a few minutes." : "Interview practice limit reached. Please pause for a few minutes.";
   return Response.json(
-    { message: "Interview practice limit reached. Please pause for a few minutes." },
-    { status: 429, headers: { "Retry-After": String(Math.ceil((current.resetAt - now) / 1000)) } },
+    { message },
+    { status: 429, headers: { "Retry-After": String(Math.ceil((current.resetAt - now) / 1000)), "Cache-Control": "no-store" } },
   );
 }
 
