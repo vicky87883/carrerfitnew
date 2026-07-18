@@ -11,7 +11,7 @@
     "dev:api": "tsx watch server/index.ts",
     "build": "npm run build:api && next build",
     "build:api": "tsc -p tsconfig.server.json",
-    "start": "node dist/server/production.js",
+    "start": "next start -H 0.0.0.0",
     "start:api": "node dist/server/index.js",
     "test": "npm run typecheck && npm run test:auth && npm run test:blog && npm run test:matcher && npm run test:interview && npm run test:ingestion",
     "test:auth": "tsx scripts/test-auth.ts",

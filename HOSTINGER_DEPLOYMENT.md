@@ -7,7 +7,7 @@ Recommended settings:
 - Framework: Next.js
 - Install command: `npm install`
 - Build command: `npm run build`
-- Start command: `npm start` (serves Next.js and Express from one Hostinger-assigned port)
+- Start command: `npm start` (runs Next.js on Hostinger's assigned port)
 - Node version: 20
 - App root: the folder that contains this `package.json`
 
