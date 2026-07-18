@@ -71,9 +71,14 @@ export function sessionCookie(value: string, maxAge: number) {
 export function validateMutationOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin) return process.env.NODE_ENV === "test" ? null : privateJson({ message: "Request origin is required." }, 403);
-  let expected: string;
-  try { expected = new URL(process.env.APP_URL || request.url).origin; } catch { return privateJson({ message: "Server origin is invalid." }, 503); }
-  return origin === expected ? null : privateJson({ message: "Cross-site request blocked." }, 403);
+  const configured = [process.env.APP_URL, ...(process.env.WEB_URL || "").split(",")]
+    .map((value) => value?.trim()).filter((value): value is string => Boolean(value));
+  const allowed = new Set<string>();
+  try {
+    for (const value of configured) allowed.add(new URL(value).origin);
+    if (!allowed.size) allowed.add(new URL(request.url).origin);
+  } catch { return privateJson({ message: "Server origin is invalid." }, 503); }
+  return allowed.has(origin) ? null : privateJson({ message: "Cross-site request blocked." }, 403);
 }
 export function safeNext(value: string | null) { return value?.startsWith("/") && !value.startsWith("//") ? value : "/dashboard"; }
 export function privateJson(body: unknown, status = 200, headers: HeadersInit = {}) {
