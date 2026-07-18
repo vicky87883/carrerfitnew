@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+    };
+    return config;
+  },
   async headers() {
     return [{
       source: "/(.*)",
@@ -13,12 +20,11 @@ const nextConfig = {
     }];
   },
   async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${process.env.API_URL || "http://localhost:4000"}/api/:path*`,
-      },
-    ];
+    if (!process.env.API_URL) return [];
+    return [{
+      source: "/api/:path*",
+      destination: `${process.env.API_URL}/api/:path*`,
+    }];
   },
 };
 
