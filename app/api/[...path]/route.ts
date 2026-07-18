@@ -20,7 +20,7 @@ const activeScrapes = new Set<string>();
 export async function GET(request: Request, context: Context) {
   try {
     const path = (await context.params).path;
-    if (path[0] === "jobs" && path.length === 1) return listJobs(request);
+    if (path[0] === "jobs" && path.length === 1) return await listJobs(request);
     if (path[0] === "jobs" && path[1]) {
       const job = await findJob(path[1]);
       return job ? Response.json(job) : Response.json({ message: "Job not found" }, { status: 404 });
@@ -29,7 +29,7 @@ export async function GET(request: Request, context: Context) {
       const denied = requireAdmin(request); if (denied) return denied;
       return Response.json(await getJobSourceOverview());
     }
-    if (path[0] === "dashboard") return dashboard();
+    if (path[0] === "dashboard") return await dashboard();
     return notFound();
   } catch (error) { return routeFailure(error); }
 }
@@ -37,17 +37,17 @@ export async function GET(request: Request, context: Context) {
 export async function POST(request: Request, context: Context) {
   try {
     const path = (await context.params).path;
-    if (path[0] === "resume" && path[1] === "analyze") return analyzeResume(request);
+    if (path[0] === "resume" && path[1] === "analyze") return await analyzeResume(request);
     if (path[0] === "job-sources") {
       const denied = requireAdmin(request); if (denied) return denied;
       const limited = rateLimit(request, "job-sources", 30); if (limited) return limited;
-      if (path[1] === "scrape-all") return scrapeAll();
-      if (path[1] && path[2] === "scrape") return scrapeOne(path[1]);
-      if (path.length === 1) return addSource(request);
+      if (path[1] === "scrape-all") return await scrapeAll();
+      if (path[1] && path[2] === "scrape") return await scrapeOne(path[1]);
+      if (path.length === 1) return await addSource(request);
     }
-    if (path[0] === "cron" && path[1] === "job-sources") return cronScrape(request);
-    if (path[0] === "assessment") return createAssessment(request);
-    if (path[0] === "applications" && path.length === 1) return createApplication(request);
+    if (path[0] === "cron" && path[1] === "job-sources") return await cronScrape(request);
+    if (path[0] === "assessment") return await createAssessment(request);
+    if (path[0] === "applications" && path.length === 1) return await createApplication(request);
     return notFound();
   } catch (error) { return routeFailure(error); }
 }
@@ -98,17 +98,19 @@ async function listJobs(request: Request) {
     const haystack = [job.title, job.company, job.location, ...job.skills].join(" ").toLowerCase();
     return (!q || haystack.includes(q)) && (category === "All" || job.category === category) && (mode === "All" || job.workMode === mode);
   });
-  const result = dedupeJobs([...curated, ...await listImportedJobs({ q, category, mode, limit: 500 })]);
-  return Response.json({ jobs: result, total: result.length });
+  const imported = await importedJobsOrEmpty({ q, category, mode, limit: 500 });
+  const result = dedupeJobs([...curated, ...imported.jobs]);
+  return Response.json({ jobs: result, total: result.length, databaseDegraded: imported.degraded });
 }
 
 async function analyzeResume(request: Request) {
   const limited = rateLimit(request, "resume", 20); if (limited) return limited;
   const form = await request.formData(); const file = await resumeFileFromForm(form.get("resume"));
   if (!file) return Response.json({ message: "Choose a PDF or DOCX resume to analyze." }, { status: 400 });
-  const text = await extractResumeText(file); const availableJobs = dedupeJobs([...jobs, ...await listImportedJobs({ limit: 80 })]);
+  const text = await extractResumeText(file); const imported = await importedJobsOrEmpty({ limit: 80 });
+  const availableJobs = dedupeJobs([...jobs, ...imported.jobs]);
   const analysis = await analyzeResumeWithGroq(text, availableJobs);
-  return Response.json({ profile: analysis.profile, jobs: hydrateRankedJobs(availableJobs, analysis), aiPowered: analysis.aiPowered, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, { status: 201 });
+  return Response.json({ profile: analysis.profile, jobs: hydrateRankedJobs(availableJobs, analysis), aiPowered: analysis.aiPowered, databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, { status: 201 });
 }
 
 async function addSource(request: Request) {
@@ -169,11 +171,13 @@ async function createApplication(request: Request) {
 }
 
 async function dashboard() {
-  const store = await readStore();
+  let store: Awaited<ReturnType<typeof readStore>>; let databaseDegraded = false;
+  try { store = await readStore(); }
+  catch { store = { applications: [], matches: [] }; databaseDegraded = true; }
   const applications = (await Promise.all(store.applications.map(async (application) => {
     const job = await findJob(application.jobId); return job ? { ...application, job } : null;
   }))).filter((item): item is NonNullable<typeof item> => Boolean(item));
-  return Response.json({ profile: { name: "Candidate", email: "Private career workspace", completion: store.matches.length ? 82 : 45 }, matches: store.matches, applications, stats: { saved: applications.filter((x) => x.status === "Saved").length, applied: applications.filter((x) => x.status !== "Saved").length, interviews: applications.filter((x) => x.status === "Interview").length, readiness: store.matches.length ? 84 : 52 } });
+  return Response.json({ profile: { name: "Candidate", email: "Private career workspace", completion: store.matches.length ? 82 : 45 }, matches: store.matches, applications, databaseDegraded, stats: { saved: applications.filter((x) => x.status === "Saved").length, applied: applications.filter((x) => x.status !== "Saved").length, interviews: applications.filter((x) => x.status === "Interview").length, readiness: store.matches.length ? 84 : 52 } });
 }
 
 async function runSourceScrape(id: string) {
@@ -181,7 +185,17 @@ async function runSourceScrape(id: string) {
   const source = await getJobSource(id); if (!source) throw new ScrapeError("Job source not found.", 404);
   activeScrapes.add(id); try { return await scrapeJobSource(source); } finally { activeScrapes.delete(id); }
 }
-async function findJob(id: string) { return jobs.find((item) => item.id === id) || await getImportedJob(id); }
+async function findJob(id: string) {
+  const curated = jobs.find((item) => item.id === id); if (curated) return curated;
+  try { return await getImportedJob(id); } catch { return null; }
+}
+async function importedJobsOrEmpty(options: Parameters<typeof listImportedJobs>[0]) {
+  try { return { jobs: await listImportedJobs(options), degraded: false }; }
+  catch (error) {
+    console.error("Imported jobs unavailable", error && typeof error === "object" && "code" in error ? error.code : "database_error");
+    return { jobs: [] as Job[], degraded: true };
+  }
+}
 function dedupeJobs(items: Job[]) { return [...new Map(items.map((job) => [job.applyUrl.replace(/\/?apply\/?$/, "").replace(/\/$/, ""), job])).values()]; }
 function requireAdmin(request: Request) {
   const configured = process.env.SCRAPER_ADMIN_TOKEN || "";
