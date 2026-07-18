@@ -37,7 +37,7 @@ const activeScrapes = new Set<string>();
 app.post("/api/resume/analyze", resumeLimiter, resumeUpload.single("resume"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "Choose a PDF or DOCX resume to analyze." });
   const text = await extractResumeText(req.file);
-  const availableJobs = dedupeJobs([...jobs, ...listImportedJobs({ limit: 80 })]);
+  const availableJobs = dedupeJobs([...jobs, ...await listImportedJobs({ limit: 80 })]);
   const analysis = await analyzeResumeWithGroq(text, availableJobs);
   res.status(201).json({
     profile: analysis.profile,
@@ -68,7 +68,7 @@ app.post("/api/interview/respond", interviewLimiter, async (req, res) => {
   res.json(await evaluateInterviewAnswer(parsed.data));
 });
 
-app.get("/api/jobs", (req, res) => {
+app.get("/api/jobs", async (req, res) => {
   const q = String(req.query.q || "").toLowerCase();
   const category = String(req.query.category || "All");
   const mode = String(req.query.mode || "All");
@@ -76,60 +76,60 @@ app.get("/api/jobs", (req, res) => {
     const haystack = [job.title, job.company, job.location, ...job.skills].join(" ").toLowerCase();
     return (!q || haystack.includes(q)) && (category === "All" || job.category === category) && (mode === "All" || job.workMode === mode);
   });
-  const imported = listImportedJobs({ q, category, mode, limit: 500 });
+  const imported = await listImportedJobs({ q, category, mode, limit: 500 });
   const result = dedupeJobs([...curated, ...imported]);
   res.json({ jobs: result, total: result.length });
 });
 
-app.get("/api/jobs/:id", (req, res) => {
-  const job = findJob(req.params.id);
+app.get("/api/jobs/:id", async (req, res) => {
+  const job = await findJob(req.params.id);
   if (!job) return res.status(404).json({ message: "Job not found" });
   res.json(job);
 });
 
-app.get("/api/job-sources", sourceLimiter, requireScraperAdmin, (_req, res) => res.json(getJobSourceOverview()));
+app.get("/api/job-sources", sourceLimiter, requireScraperAdmin, async (_req, res) => res.json(await getJobSourceOverview()));
 
 app.post("/api/job-sources", sourceLimiter, requireScraperAdmin, async (req, res) => {
   const url = String(req.body.url || "").slice(0, 1000); const name = String(req.body.name || "").slice(0, 100);
   await validateJobSourceUrl(url);
   const identified = identifyJobSource(url, name);
   let source;
-  try { source = createJobSource(identified); }
+  try { source = await createJobSource(identified); }
   catch (error) { if (error instanceof Error && error.message.includes("UNIQUE")) return res.status(409).json({ message: "This job source already exists." }); throw error; }
   try {
     const result = await runSourceScrape(source.id);
-    res.status(201).json({ source: getJobSource(source.id), imported: result.imported });
+    res.status(201).json({ source: await getJobSource(source.id), imported: result.imported });
   } catch (error) {
-    res.status(error instanceof ScrapeError ? error.status : 422).json({ message: error instanceof Error ? error.message : "The source could not be imported.", source: getJobSource(source.id) });
+    res.status(error instanceof ScrapeError ? error.status : 422).json({ message: error instanceof Error ? error.message : "The source could not be imported.", source: await getJobSource(source.id) });
   }
 });
 
 app.post("/api/job-sources/scrape-all", sourceLimiter, requireScraperAdmin, async (_req, res) => {
-  const enabled = listJobSources().filter((source) => source.enabled);
+  const enabled = (await listJobSources()).filter((source) => source.enabled);
   const results = await Promise.allSettled(enabled.map((source) => runSourceScrape(source.id)));
-  res.json({ refreshed: results.filter((result) => result.status === "fulfilled").length, failed: results.filter((result) => result.status === "rejected").length, overview: getJobSourceOverview() });
+  res.json({ refreshed: results.filter((result) => result.status === "fulfilled").length, failed: results.filter((result) => result.status === "rejected").length, overview: await getJobSourceOverview() });
 });
 
 app.post("/api/job-sources/:id/scrape", sourceLimiter, requireScraperAdmin, async (req, res) => {
-  const id = String(req.params.id); const source = getJobSource(id); if (!source) return res.status(404).json({ message: "Job source not found." });
+  const id = String(req.params.id); const source = await getJobSource(id); if (!source) return res.status(404).json({ message: "Job source not found." });
   const result = await runSourceScrape(source.id);
-  res.json({ source: getJobSource(source.id), imported: result.imported });
+  res.json({ source: await getJobSource(source.id), imported: result.imported });
 });
 
-app.patch("/api/job-sources/:id", sourceLimiter, requireScraperAdmin, (req, res) => {
+app.patch("/api/job-sources/:id", sourceLimiter, requireScraperAdmin, async (req, res) => {
   if (typeof req.body.enabled !== "boolean") return res.status(400).json({ message: "Provide an enabled state." });
-  const source = setJobSourceEnabled(String(req.params.id), req.body.enabled); if (!source) return res.status(404).json({ message: "Job source not found." });
+  const source = await setJobSourceEnabled(String(req.params.id), req.body.enabled); if (!source) return res.status(404).json({ message: "Job source not found." });
   res.json(source);
 });
 
-app.delete("/api/job-sources/:id", sourceLimiter, requireScraperAdmin, (req, res) => {
-  if (!deleteJobSource(String(req.params.id))) return res.status(404).json({ message: "Job source not found." });
+app.delete("/api/job-sources/:id", sourceLimiter, requireScraperAdmin, async (req, res) => {
+  if (!await deleteJobSource(String(req.params.id))) return res.status(404).json({ message: "Job source not found." });
   res.status(204).end();
 });
 
 app.post("/api/cron/job-sources", sourceLimiter, async (req, res) => {
   if (!secureMatch(String(req.headers["x-cron-secret"] || ""), process.env.CRON_SECRET || "")) return res.status(401).json({ message: "Invalid cron credential." });
-  const enabled = listJobSources().filter((source) => source.enabled);
+  const enabled = (await listJobSources()).filter((source) => source.enabled);
   const results = await Promise.allSettled(enabled.map((source) => runSourceScrape(source.id)));
   res.json({ refreshed: results.filter((result) => result.status === "fulfilled").length, failed: results.filter((result) => result.status === "rejected").length });
 });
@@ -160,7 +160,7 @@ app.post("/api/assessment", async (req, res) => {
 });
 
 app.post("/api/applications", async (req, res) => {
-  const job = findJob(String(req.body.jobId || ""));
+  const job = await findJob(String(req.body.jobId || ""));
   if (!job) return res.status(404).json({ message: "Job not found" });
   const store = await readStore();
   const existing = store.applications.find((item) => item.jobId === job.id);
@@ -187,10 +187,10 @@ app.delete("/api/applications/:id", async (req, res) => {
 
 app.get("/api/dashboard", async (_req, res) => {
   const store = await readStore();
-  const applications = store.applications.flatMap((application) => {
-    const job = findJob(application.jobId);
-    return job ? [{ ...application, job }] : [];
-  });
+  const applications = (await Promise.all(store.applications.map(async (application) => {
+    const job = await findJob(application.jobId);
+    return job ? { ...application, job } : null;
+  }))).filter((application): application is NonNullable<typeof application> => Boolean(application));
   res.json({
     profile: { name: "Candidate", email: "Private career workspace", completion: store.matches.length ? 82 : 45 },
     matches: store.matches,
@@ -206,7 +206,7 @@ export function apiErrorHandler(error: unknown, _req: express.Request, res: expr
   console.error(error); res.status(500).json({ message: "Something went wrong. Please try again." });
 }
 
-function findJob(id: string) { return jobs.find((item) => item.id === id) || getImportedJob(id); }
+async function findJob(id: string) { return jobs.find((item) => item.id === id) || await getImportedJob(id); }
 function dedupeJobs(items: typeof jobs) { return [...new Map(items.map((job) => [job.applyUrl.replace(/\/?apply\/?$/, "").replace(/\/$/, ""), job])).values()]; }
 
 function requireScraperAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -223,7 +223,7 @@ function secureMatch(value: string, expected: string) {
 
 async function runSourceScrape(id: string) {
   if (activeScrapes.has(id)) throw new ScrapeError("This source is already being refreshed.", 409);
-  const source = getJobSource(id); if (!source) throw new ScrapeError("Job source not found.", 404);
+  const source = await getJobSource(id); if (!source) throw new ScrapeError("Job source not found.", 404);
   activeScrapes.add(id);
   try { return await scrapeJobSource(source); }
   finally { activeScrapes.delete(id); }

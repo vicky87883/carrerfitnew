@@ -22,17 +22,17 @@ async function main() {
     }</script></head></html>`;
     const parsed = await parseStructuredJobPage(html, "https://careers.example.com/jobs/42", "Acme");
     if (parsed.length !== 1 || parsed[0].title !== "Senior Data Analyst" || parsed[0].workMode !== "Remote") throw new Error("JobPosting parser failed.");
-    const source = database.createJobSource({ name: "Acme Analytics", url: "https://careers.example.com/jobs/42", type: "Structured data" });
-    database.replaceSourceJobs(source, parsed);
-    const jobs = database.listImportedJobs({ q: "analyst" });
+    const source = await database.createJobSource({ name: "Acme Analytics", url: "https://careers.example.com/jobs/42", type: "Structured data" });
+    await database.replaceSourceJobs(source, parsed);
+    const jobs = await database.listImportedJobs({ q: "analyst" });
     if (jobs.length !== 1 || !jobs[0].imported || jobs[0].source !== "Company careers") throw new Error("Database import failed.");
-    const overview = database.getJobSourceOverview();
+    const overview = await database.getJobSourceOverview();
     if (overview.stats.activeJobs !== 1 || overview.sources[0].activeJobCount !== 1) throw new Error("Source statistics failed.");
-    database.replaceSourceJobs(source, []);
-    if (database.listImportedJobs().length !== 0) throw new Error("Stale job deactivation failed.");
+    await database.replaceSourceJobs(source, []);
+    if ((await database.listImportedJobs()).length !== 0) throw new Error("Stale job deactivation failed.");
     console.log("Job ingestion passed: source detection → SSRF guard → JobPosting parse → deduplicated database lifecycle.");
   } finally {
-    database.closeJobDatabaseForTests();
+    await database.closeJobDatabaseForTests();
     await rm(directory, { recursive: true, force: true });
   }
 }
