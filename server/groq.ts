@@ -53,8 +53,33 @@ export async function analyzeResumeWithGroq(resumeText: string, jobs: Job[]) {
   const payload = await response.json() as { choices?: { message?: { content?: string } }[] };
   const content = payload.choices?.[0]?.message?.content;
   if (!content) return fallbackAnalysis(resumeText, jobs);
-  try { return { ...analysisSchema.parse(JSON.parse(content)), aiPowered: true }; }
-  catch (error) { console.error("Groq response validation failed", error); return fallbackAnalysis(resumeText, jobs); }
+  try {
+    const parsed = analysisSchema.safeParse(normalizeAnalysis(JSON.parse(content)));
+    if (parsed.success) return { ...parsed.data, aiPowered: true };
+    console.warn("Groq response did not contain a usable analysis; using skills-based matching.");
+    return fallbackAnalysis(resumeText, jobs);
+  } catch {
+    console.warn("Groq returned invalid JSON; using skills-based matching.");
+    return fallbackAnalysis(resumeText, jobs);
+  }
+}
+
+function normalizeAnalysis(value: unknown) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const profile = source.profile && typeof source.profile === "object" ? source.profile as Record<string, unknown> : {};
+  const strings = (input: unknown, maxItems: number, maxLength: number) => Array.isArray(input)
+    ? input.map((item) => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string, unknown>).name || (item as Record<string, unknown>).degree || (item as Record<string, unknown>).school || "") : "")
+      .map((item) => item.trim().slice(0, maxLength)).filter(Boolean).slice(0, maxItems)
+    : [];
+  const matches = Array.isArray(source.matches) ? source.matches.map((item) => {
+    const match = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return { jobId: String(match.jobId || ""), fitScore: Number(match.fitScore || 1), matchedSkills: strings(match.matchedSkills, 10, 80), missingSkills: strings(match.missingSkills, 8, 80), matchReason: String(match.matchReason || "").slice(0, 320) };
+  }).slice(0, 12) : [];
+  return { profile: {
+    name: String(profile.name || "Candidate").slice(0, 100), headline: String(profile.headline || "Career candidate").slice(0, 160), summary: String(profile.summary || "Resume-based career profile.").slice(0, 600),
+    yearsExperience: Math.max(0, Math.min(50, Number(profile.yearsExperience || 0))), skills: strings(profile.skills, 24, 80), strengths: strings(profile.strengths, 8, 120), targetRoles: strings(profile.targetRoles, 8, 120),
+    seniority: String(profile.seniority || "Early career").slice(0, 60), education: strings(profile.education, 6, 180), improvements: strings(profile.improvements, 6, 220),
+  }, matches };
 }
 
 function fallbackAnalysis(resumeText: string, jobs: Job[]): AiAnalysis & { aiPowered: false } {
