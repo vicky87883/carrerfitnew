@@ -81,6 +81,38 @@ Copy `.env.example` to `.env` and add the Groq key before starting the API. With
 
 The publishing workspace is available at `/blog-admin` and requires `BLOG_ADMIN_TOKEN`. Draft articles are never included in public blog responses, search metadata, the sitemap, or RSS.
 
+## Route and API reference
+
+| Area | Routes | Access |
+| --- | --- | --- |
+| Public website | `/`, `/jobs`, `/jobs/[id]`, `/blog`, `/blog/[slug]` | Public |
+| Account | `/register`, `/login`, `/forgot-password`, `/reset-password` | Public; rate limited |
+| Private workspace | `/dashboard`, `/resume`, `/assessment`, `/interview` | Verified account when `AUTH_REQUIRED=true` |
+| Job administration | `/job-sources` | Enter `SCRAPER_ADMIN_TOKEN` in the workspace |
+| Blog administration | `/blog-admin` | Enter `BLOG_ADMIN_TOKEN` in the workspace |
+| Health | `GET /api/health` | Public; reports configuration without secrets |
+| Account API | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/verify`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/resend-verification` | Session cookie or one-time verification token where applicable |
+| Product API | `/api/resume/analyze`, `/api/assessment`, `/api/interview/start`, `/api/interview/respond`, `/api/dashboard`, `/api/applications` | Verified session when required |
+| Jobs API | `GET /api/jobs`, `GET /api/jobs/[id]` | Public |
+| Source API | `/api/job-sources`, `/api/job-sources/scrape-all`, `/api/job-sources/[id]/scrape` | Header `x-admin-token: SCRAPER_ADMIN_TOKEN` |
+| Scheduled import | `POST /api/cron/job-sources` | Header `x-cron-secret: CRON_SECRET` |
+| Blog API | `/api/blog`, `/api/blog/[slug]` | Public reads; writes use `x-admin-token: BLOG_ADMIN_TOKEN` |
+
+### Hostinger production variables
+
+Set these only in Hostinger Environment variables. Do not place them in browser code, GitHub, or screenshots.
+
+| Variable group | Required for |
+| --- | --- |
+| `GROQ_API_KEY`, `GROQ_MODEL` | AI resume and interview features |
+| `WEB_URL`, `APP_URL`, `AUTH_SECRET`, `AUTH_REQUIRED` | Secure cookies, origin validation, and account access |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSL`, `DB_POOL_SIZE` | MySQL data storage |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Registration confirmations and password reset emails |
+| `SCRAPER_ADMIN_TOKEN`, `CRON_SECRET` | Job-source administration and scheduled refreshes |
+| `BLOG_ADMIN_TOKEN` | Blog administration |
+
+`/job-sources` is the job administration route. `/blog-admin` is the content administration route. They intentionally do not use a shared public "admin" URL or expose any administrator secret.
+
 ## Safe authentication rollout
 
 1. Deploy with `AUTH_REQUIRED=false` and all other authentication/SMTP variables configured.
