@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const protectedPaths = ["/dashboard", "/resume", "/interview", "/assessment"];
+const protectedPaths = ["/dashboard", "/resume", "/interview", "/assessment", "/jobs", "/job-sources"];
 
 export function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
