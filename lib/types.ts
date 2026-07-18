@@ -15,9 +15,31 @@ export type Job = {
   logo: string;
   featured?: boolean;
   applyUrl: string;
-  source: "Lever" | "Ashby" | "Company careers";
+  source: "Lever" | "Ashby" | "Greenhouse" | "Company careers";
   verifiedAt: string;
   requirements: string[];
+  imported?: boolean;
+  sourceName?: string;
+};
+
+export type JobSource = {
+  id: string;
+  name: string;
+  url: string;
+  type: "Lever" | "Ashby" | "Greenhouse" | "Structured data";
+  enabled: boolean;
+  createdAt: string;
+  lastScrapedAt: string | null;
+  lastStatus: "Pending" | "Running" | "Success" | "Failed";
+  lastError: string | null;
+  lastImportCount: number;
+  activeJobCount: number;
+};
+
+export type JobSourceOverview = {
+  sources: JobSource[];
+  stats: { sources: number; activeJobs: number; last24Hours: number; failedSources: number };
+  recentJobs: Job[];
 };
 
 export type ResumeProfile = {

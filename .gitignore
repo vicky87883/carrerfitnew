@@ -3,6 +3,8 @@ node_modules
 out
 dist
 server/data/store.json
+server/data/*.sqlite
+server/data/*.sqlite-*
 .env
 .env*
 !.env.example

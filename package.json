@@ -13,12 +13,15 @@
     "build:api": "tsc -p tsconfig.server.json",
     "start": "node dist/server/production.js",
     "start:api": "node dist/server/index.js",
-    "test": "npm run typecheck && npm run test:matcher && npm run test:interview",
+    "test": "npm run typecheck && npm run test:matcher && npm run test:interview && npm run test:ingestion",
     "test:matcher": "tsx scripts/test-matcher.ts",
     "test:interview": "tsx scripts/test-interview.ts",
+    "test:ingestion": "tsx scripts/test-job-ingestion.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
@@ -34,6 +37,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.3",
     "@types/multer": "^2.2.0",
