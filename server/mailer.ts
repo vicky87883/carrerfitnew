@@ -20,6 +20,14 @@ export async function sendPasswordResetEmail(input: { email: string; name: strin
     html: emailHtml("Reset your password", `Hello ${escapeHtml(input.name)}. Use the secure link below to choose a new password.`, url, "Reset password", "This link expires in 30 minutes and can be used once."),
   });
 }
+export async function sendAdminAccessEmail(token: string) {
+  const url = appUrl(`/api/admin/confirm?token=${encodeURIComponent(token)}`);
+  return send({
+    to: process.env.ADMIN_EMAIL || "", subject: "Confirm CarrerFit administrator sign-in",
+    text: `A CarrerFit administrator sign-in was requested. Confirm access: ${url}\n\nThis link expires in 15 minutes. If this was not you, ignore this email.`,
+    html: emailHtml("Confirm administrator sign-in", "Use the secure link below to open the CarrerFit administrator control centre.", url, "Confirm admin access", "This link expires in 15 minutes. If this was not you, ignore this email."),
+  });
+}
 
 async function send(message: { to: string; subject: string; text: string; html: string }) {
   if (!mailConfigured()) throw new Error("SMTP_NOT_CONFIGURED");

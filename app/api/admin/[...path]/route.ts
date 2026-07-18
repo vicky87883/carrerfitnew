@@ -1,7 +1,7 @@
 import { rateLimit } from "@/app/api/_utils";
-import { timingSafeEqual } from "node:crypto";
-import { markRequestMfaVerified, privateJson, requireAdminUser, validateMutationOrigin } from "@/server/auth";
-import type { SessionUser } from "@/server/auth-store";
+import { adminConfigured, adminCredentialsValid, adminSession, clearAdminCookie, confirmationValid, createAdminCookie, createConfirmationToken } from "@/server/admin-access";
+import { privateJson, validateMutationOrigin } from "@/server/auth";
+import { sendAdminAccessEmail } from "@/server/mailer";
 import { databaseBackend, getMysqlPool } from "@/server/mysql";
 import type { RowDataPacket } from "mysql2/promise";
 
@@ -10,44 +10,39 @@ export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ path: string[] }> };
 
 export async function GET(request: Request, context: Context) {
-  try {
-    const path = (await context.params).path[0] || "overview";
-    if (path === "status") return status(request);
-    if (path === "overview") return overview(request);
-    return privateJson({ message: "Admin route not found." }, 404);
-  } catch { return privateJson({ message: "The administrator service is temporarily unavailable." }, 503); }
+  const path = (await context.params).path[0] || "status";
+  if (path === "confirm") return confirm(request);
+  if (path === "status") return privateJson({ configured: adminConfigured(), authenticated: adminSession(request) });
+  if (path === "overview") return overview(request);
+  return privateJson({ message: "Admin route not found." }, 404);
 }
-
 export async function POST(request: Request, context: Context) {
   const originError = validateMutationOrigin(request); if (originError) return originError;
   try {
     const path = (await context.params).path[0];
-    if (path === "unlock") return unlock(request);
+    if (path === "request-access") return requestAccess(request);
+    if (path === "logout") return privateJson({ ok: true }, 200, { "Set-Cookie": clearAdminCookie() });
     return privateJson({ message: "Admin route not found." }, 404);
   } catch { return privateJson({ message: "The administrator service is temporarily unavailable." }, 503); }
 }
-
-async function status(request: Request) {
-  const { user, response } = await requireAdminUser(request, false); if (response || !user) return response!;
-  return privateJson({ admin: true, unlocked: Boolean((user as SessionUser).mfaVerifiedAt), passwordConfigured: adminPasswordConfigured() });
+async function requestAccess(request: Request) {
+  const limited = rateLimit(request, "admin-access", 5); if (limited) return limited;
+  if (!adminConfigured()) return privateJson({ message: "Administrator credentials are not configured on the server." }, 503);
+  const body = await request.json() as { email?: string; username?: string; password?: string };
+  if (!adminCredentialsValid(String(body.email || ""), String(body.username || ""), String(body.password || ""))) return privateJson({ message: "Administrator email, username, or password is incorrect." }, 401);
+  await sendAdminAccessEmail(createConfirmationToken());
+  return privateJson({ message: "Confirmation link sent. Open it from the administrator mailbox to continue." });
 }
-async function unlock(request: Request) {
-  const limited = rateLimit(request, "admin-unlock", 8); if (limited) return limited;
-  const { user, response } = await requireAdminUser(request, false); if (response || !user) return response!;
-  if (!adminPasswordConfigured()) return privateJson({ message: "ADMIN_PASSWORD is not configured on the server." }, 503);
-  const body = await request.json() as { password?: string }; const supplied = String(body.password || ""); const expected = process.env.ADMIN_PASSWORD || "";
-  if (!safeEquals(supplied, expected)) return privateJson({ message: "Administrator password is incorrect." }, 401);
-  await markRequestMfaVerified(request); return privateJson({ ok: true });
+function confirm(request: Request) {
+  const token = new URL(request.url).searchParams.get("token") || "";
+  if (!confirmationValid(token)) return Response.redirect(new URL("/admin?confirmation=invalid", request.url), 303);
+  return new Response(null, { status: 303, headers: { Location: new URL("/admin?confirmed=1", request.url).toString(), "Set-Cookie": createAdminCookie(), "Cache-Control": "no-store" } });
 }
-function adminPasswordConfigured() { return (process.env.ADMIN_PASSWORD || "").length >= 16; }
-function safeEquals(left: string, right: string) { const a = Buffer.from(left); const b = Buffer.from(right); return a.length === b.length && timingSafeEqual(a, b); }
 async function overview(request: Request) {
-  const { response } = await requireAdminUser(request); if (response) return response;
+  if (!adminSession(request)) return privateJson({ message: "Confirm an administrator sign-in first." }, 401);
   if (databaseBackend() !== "mysql") return privateJson({ database: "sqlite", stats: null });
-  const pool = await getMysqlPool();
-  const [[users], [jobs], [sources], [posts]] = await Promise.all([
-    pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM users"), pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM imported_jobs WHERE active=1"),
-    pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM job_sources WHERE enabled=1"), pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM blog_posts WHERE status='Published'"),
+  const pool = await getMysqlPool(); const [[users], [jobs], [sources], [posts]] = await Promise.all([
+    pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM users"), pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM imported_jobs WHERE active=1"), pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM job_sources WHERE enabled=1"), pool.query<(RowDataPacket & { count: number })[]>("SELECT COUNT(*) AS count FROM blog_posts WHERE status='Published'"),
   ]);
   return privateJson({ database: "mysql", stats: { users: Number(users[0]?.count || 0), activeJobs: Number(jobs[0]?.count || 0), sources: Number(sources[0]?.count || 0), publishedPosts: Number(posts[0]?.count || 0) } });
 }

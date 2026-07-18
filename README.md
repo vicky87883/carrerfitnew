@@ -64,8 +64,7 @@ Environment variables:
 - `BLOG_ADMIN_TOKEN`: separate secret of at least 24 characters used to unlock `/blog-admin`
 - `APP_URL`: public origin used for secure confirmation/reset links, for example `https://carrerfit.com`
 - `AUTH_SECRET`: random secret of at least 32 characters used to protect request fingerprints
-- `ADMIN_EMAILS`: comma-separated administrator emails; set `admin@carrerfit.com` for the initial administrator
-- `ADMIN_PASSWORD`: separate server-side administrator password (at least 16 characters)
+- `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`: separate administrator email, username, and password (password minimum 16 characters)
 - `AUTH_REQUIRED`: set to `true` only after the SMTP settings below are working
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`: SMTP connection (`smtp.hostinger.com`, `465`, `true` for Hostinger)
 - `SMTP_USER`, `SMTP_PASSWORD`: credentials for a real mailbox such as `no-reply@carrerfit.com`
@@ -90,7 +89,7 @@ The publishing workspace is available at `/blog-admin` and requires `BLOG_ADMIN_
 | Public website | `/`, `/jobs`, `/jobs/[id]`, `/blog`, `/blog/[slug]` | Public |
 | Account | `/register`, `/login`, `/forgot-password`, `/reset-password` | Public; rate limited |
 | Private workspace | `/dashboard`, `/resume`, `/assessment`, `/interview` | Verified account when `AUTH_REQUIRED=true` |
-| Administrator control centre | `/admin` | Verified account in `ADMIN_EMAILS`, plus `ADMIN_PASSWORD` |
+| Administrator control centre | `/admin` | Separate administrator email, username, password, and email-confirmed session |
 | Job administration | `/job-sources` | Enter `SCRAPER_ADMIN_TOKEN` in the workspace |
 | Blog administration | `/blog-admin` | Enter `BLOG_ADMIN_TOKEN` in the workspace |
 | Health | `GET /api/health` | Public; reports configuration without secrets |
@@ -114,7 +113,7 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 | `SCRAPER_ADMIN_TOKEN`, `CRON_SECRET` | Job-source administration and scheduled refreshes |
 | `BLOG_ADMIN_TOKEN` | Blog administration |
 
-`/admin` is the restricted administrator control centre. Create and verify `admin@carrerfit.com`, sign in, then enter the server-side `ADMIN_PASSWORD` to unlock the administrator session.
+`/admin` is separate from user accounts. Enter the configured administrator email, username, and password; the server sends a confirmation link to `ADMIN_EMAIL`, which opens the control centre in that browser.
 
 ## Safe authentication rollout
 
