@@ -15,7 +15,7 @@ import {
 } from "@/server/job-database";
 import { identifyJobSource, ScrapeError, scrapeJobSource, validateJobSourceUrl } from "@/server/job-scraper";
 import { extractResumeText } from "@/server/resume";
-import { saveResumeFile } from "@/server/resume-vault";
+import { getResumeDocument, saveResumeDocument, saveResumeFile } from "@/server/resume-vault";
 import { readStore, writeStore } from "@/server/store";
 
 export const runtime = "nodejs";
@@ -125,8 +125,8 @@ async function analyzeResume(request: Request) {
   const text = await extractResumeText(file); const imported = await importedJobsOrEmpty({ limit: 80 });
   const availableJobs = dedupeJobs([...jobs, ...imported.jobs]);
   const analysis = await analyzeResumeWithGroq(text, availableJobs); const rankedJobs = hydrateRankedJobs(availableJobs, analysis);
-  if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file)]);
-  return privateJson({ profile: analysis.profile, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
+  if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file), saveResumeDocument(auth.user.id, text, analysis.document)]);
+  return privateJson({ profile: analysis.profile, document: analysis.document, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
 }
 
 async function addSource(request: Request) {
@@ -197,10 +197,10 @@ async function createApplication(request: Request) {
 async function dashboard(request: Request) {
   const auth = await requireVerifiedUser(request); if (auth.response) return auth.response;
   if (auth.user) {
-    const [privateData, saved] = await Promise.all([getPrivateData(auth.user.id), listUserApplications(auth.user.id)]);
+    const [privateData, saved, resumeDocument] = await Promise.all([getPrivateData(auth.user.id), listUserApplications(auth.user.id), getResumeDocument(auth.user.id)]);
     const applications = (await Promise.all(saved.map(async (application) => { const job = await findJob(application.jobId); return job ? { ...application, job } : null; }))).filter((item): item is NonNullable<typeof item> => Boolean(item));
     const completion = privateData.resumeProfile ? 90 : privateData.assessmentMatches.length ? 68 : 35;
-    return privateJson({ profile: { name: auth.user.name, email: auth.user.email, completion }, resumeProfile: privateData.resumeProfile, resumeJobs: privateData.resumeJobs.slice(0, 5), matches: privateData.assessmentMatches, applications, stats: { saved: applications.filter((x) => x.status === "Saved").length, applied: applications.filter((x) => x.status !== "Saved").length, interviews: applications.filter((x) => x.status === "Interview").length, readiness: privateData.resumeProfile ? 86 : privateData.assessmentMatches.length ? 70 : 45 } });
+    return privateJson({ profile: { name: auth.user.name, email: auth.user.email, completion }, resumeProfile: privateData.resumeProfile, resumeDocument: resumeDocument?.document || null, resumeJobs: privateData.resumeJobs.slice(0, 5), matches: privateData.assessmentMatches, applications, stats: { saved: applications.filter((x) => x.status === "Saved").length, applied: applications.filter((x) => x.status !== "Saved").length, interviews: applications.filter((x) => x.status === "Interview").length, readiness: privateData.resumeProfile ? 86 : privateData.assessmentMatches.length ? 70 : 45 } });
   }
   let store: Awaited<ReturnType<typeof readStore>>; let databaseDegraded = false;
   try { store = await readStore(); }

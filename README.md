@@ -9,11 +9,11 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Detailed role pages with fit scores and skill requirements
 - Five-step career assessment with generated career matches
 - Saved-job pipeline with editable application statuses
-- Dashboard with profile readiness, career matches, and weekly actions
+- Data-rich dashboard with resume extraction health, evidenced skills, experience timeline, ranked jobs, and application pipeline
 - Verified-email accounts with Argon2id passwords, one-time recovery links, and server-side sessions
 - Per-user resume profiles, assessment matches, and saved-job pipelines
-- PDF and DOCX resume parsing (8 MB limit, memory-only processing)
-- Groq-powered structured resume profiling and evidence-based job ranking
+- PDF and DOCX resume parsing (8 MB limit) with encrypted original and extracted-text retention for signed-in users
+- Groq-powered, schema-validated resume JSON covering identity, skills with evidence, experience, education, projects, certifications, languages, and keywords
 - Resume-aware AI mock interviews with adaptive Groq follow-up questions
 - Spoken interviewer prompts, browser speech-to-text answers, and typed fallback
 - Optional on-device camera coaching for framing, lighting, and movement stability
@@ -90,8 +90,8 @@ The publishing workspace is available at `/blog-admin` and requires `BLOG_ADMIN_
 | Account | `/register`, `/login`, `/forgot-password`, `/reset-password` | Public; rate limited |
 | Private workspace | `/dashboard`, `/resume`, `/assessment`, `/interview` | Verified account when `AUTH_REQUIRED=true` |
 | Administrator control centre | `/admin` | Separate administrator email, username, password, and email-confirmed session |
-| Job administration | `/job-sources` | Enter `SCRAPER_ADMIN_TOKEN` in the workspace |
-| Blog administration | `/blog-admin` | Enter `BLOG_ADMIN_TOKEN` in the workspace |
+| Job administration | `/admin` → Jobs & scraping | Confirmed administrator session |
+| Blog administration | `/admin` → Blog publishing | Confirmed administrator session |
 | Health | `GET /api/health` | Public; reports configuration without secrets |
 | Account API | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/verify`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/resend-verification` | Session cookie or one-time verification token where applicable |
 | Product API | `/api/resume/analyze`, `/api/assessment`, `/api/interview/start`, `/api/interview/respond`, `/api/dashboard`, `/api/applications` | Verified session when required |
@@ -128,7 +128,7 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 - Put the service behind HTTPS and a reverse proxy with request-body limits.
 - SQLite and the local JSON store remain the development fallback. Production uses MySQL/MariaDB for jobs and account-isolated private data.
 - MySQL schema bootstrap is non-destructive and uses `CREATE TABLE IF NOT EXISTS`. Run `npm run migrate:mysql` once to copy existing SQLite jobs and local state after configuring MySQL.
-- With accounts enabled, uploaded PDF/DOCX resumes are AES-256-GCM encrypted with a key derived from `AUTH_SECRET` and stored in the private `user_resume_files` table. Only the confirmed administrator session can retrieve a preview; structured profiles and ranked results remain isolated per user.
+- With accounts enabled, uploaded PDF/DOCX files are AES-256-GCM encrypted in `user_resume_files`. The complete extracted text and normalized resume JSON are independently encrypted in `user_resume_documents`; only authenticated private routes decrypt the structured view. Groq fields are schema-validated and carry evidence/confidence, but automated extraction must still be reviewed for important decisions.
 - Session tokens are random, stored only as SHA-256 hashes, and delivered in `HttpOnly`, `SameSite=Lax`, production `Secure` cookies. Passwords use Argon2id.
 - Email verification and password-reset tokens are random, hashed in storage, expire, and can be used only once.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.

@@ -6,6 +6,7 @@ import { join } from "node:path";
 const database = join(process.cwd(), "server", "data", `auth-test-${process.pid}.sqlite`);
 process.env.CARRERFIT_DB_PATH = database;
 delete process.env.DATABASE_URL; delete process.env.DB_HOST; delete process.env.DB_NAME; delete process.env.DB_USER; delete process.env.DB_PASSWORD;
+process.env.AUTH_SECRET = "test-only-resume-vault-secret-that-is-long-enough";
 
 async function main() {
   const { createOneTimeToken, hashPassword, passwordMatches } = await import("../server/auth.js");
@@ -13,6 +14,7 @@ async function main() {
     consumeAuthToken, createAuthToken, createSession, createUser, createUserApplication, findSessionUser,
     getPrivateData, listUserApplications, markUserVerified, saveAssessmentMatches, saveResumeAnalysis,
   } = await import("../server/auth-store.js");
+  const { getResumeDocument, getResumeFile, saveResumeDocument, saveResumeFile } = await import("../server/resume-vault.js");
   const { closeJobDatabaseForTests } = await import("../server/job-database.js");
 
   try {
@@ -38,6 +40,14 @@ async function main() {
   await saveAssessmentMatches(alice.id, [{ role: "Product Analyst", score: 92, summary: "Strong match", strengths: ["SQL"], gaps: [], nextSteps: [] }]);
   assert.equal((await getPrivateData(alice.id)).resumeProfile?.name, "Alice");
   assert.equal((await getPrivateData(bob.id)).resumeProfile, null, "private resume data must be isolated by user");
+
+  const document = { schemaVersion: 1 as const, identity: { fullName: "Alice Candidate", givenName: "Alice", surname: "Candidate", email: "alice@example.com", phone: "", location: "", links: [] }, headline: "Product Analyst", summary: "Analytics specialist", skills: [{ name: "SQL", category: "Data", evidence: "Built SQL dashboards", confidence: .96 }], experience: [], education: [], certifications: [], projects: [], languages: [], keywords: ["sql", "analytics"], sectionsDetected: ["skills"], wordCount: 4, characterCount: 20, extractionConfidence: .9, warnings: [] };
+  await saveResumeFile(alice.id, { originalname: "alice-resume.pdf", mimetype: "application/pdf", size: 11, buffer: Buffer.from("private pdf") });
+  await saveResumeDocument(alice.id, "Built SQL dashboards", document);
+  assert.equal((await getResumeFile(alice.id))?.data.toString(), "private pdf");
+  assert.equal((await getResumeDocument(alice.id))?.document.identity.email, "alice@example.com");
+  assert.equal(await getResumeFile(bob.id), null, "encrypted resume files must be isolated by user");
+  assert.equal(await getResumeDocument(bob.id), null, "encrypted resume documents must be isolated by user");
 
   await createUserApplication(alice.id, "job-1");
   assert.equal((await listUserApplications(alice.id)).length, 1);

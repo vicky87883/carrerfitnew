@@ -167,6 +167,19 @@ async function ensureMysqlSchema(target: Pool) {
         uploaded_at DATETIME(3) NOT NULL,
         CONSTRAINT user_resume_files_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS user_resume_documents (
+        user_id VARCHAR(36) PRIMARY KEY,
+        encrypted_document LONGBLOB NOT NULL,
+        document_iv VARBINARY(12) NOT NULL,
+        document_auth_tag VARBINARY(16) NOT NULL,
+        encrypted_text LONGBLOB NOT NULL,
+        text_iv VARBINARY(12) NOT NULL,
+        text_auth_tag VARBINARY(16) NOT NULL,
+        word_count INT UNSIGNED NOT NULL,
+        character_count INT UNSIGNED NOT NULL,
+        analyzed_at DATETIME(3) NOT NULL,
+        CONSTRAINT user_resume_documents_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS user_applications (
         id VARCHAR(36) PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,

@@ -74,6 +74,36 @@ export type ResumeProfile = {
   improvements: string[];
 };
 
+export type ResumeDocument = {
+  schemaVersion: 1;
+  identity: {
+    fullName: string;
+    givenName: string;
+    surname: string;
+    email: string;
+    phone: string;
+    location: string;
+    links: string[];
+  };
+  headline: string;
+  summary: string;
+  skills: { name: string; category: string; evidence: string; confidence: number }[];
+  experience: {
+    company: string; title: string; location: string; startDate: string; endDate: string;
+    current: boolean; description: string; achievements: string[]; technologies: string[];
+  }[];
+  education: { institution: string; degree: string; field: string; startDate: string; endDate: string; details: string }[];
+  certifications: { name: string; issuer: string; date: string; credentialId: string; url: string }[];
+  projects: { name: string; description: string; url: string; technologies: string[]; highlights: string[] }[];
+  languages: string[];
+  keywords: string[];
+  sectionsDetected: string[];
+  wordCount: number;
+  characterCount: number;
+  extractionConfidence: number;
+  warnings: string[];
+};
+
 export type RankedJob = Job & {
   fitScore: number;
   matchConfidence: "Strong" | "Good" | "Exploratory";
@@ -84,6 +114,7 @@ export type RankedJob = Job & {
 
 export type ResumeMatchResult = {
   profile: ResumeProfile;
+  document?: ResumeDocument;
   jobs: RankedJob[];
   aiPowered: boolean;
   file: { name: string; type: string; size: number; charactersRead: number };
@@ -175,6 +206,7 @@ export type Application = {
 export type DashboardData = {
   profile: { name: string; email: string; completion: number };
   resumeProfile?: ResumeProfile | null;
+  resumeDocument?: ResumeDocument | null;
   resumeJobs?: RankedJob[];
   matches: CareerMatch[];
   applications: (Application & { job: Job })[];

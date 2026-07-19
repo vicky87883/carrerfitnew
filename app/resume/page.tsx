@@ -163,7 +163,7 @@ export default function ResumePage() {
               },
             )}
           </div>
-          <small>Your resume is processed securely and is not stored.</small>
+          <small>Your document is encrypted at rest; extracted fields are validated before they reach your private profile.</small>
         </section>
       </main>
     );
@@ -236,7 +236,7 @@ export default function ResumePage() {
             <small>
               <ShieldCheck />{" "}
               {result.storedForAccount
-                ? "Structured results saved privately. The original file was discarded."
+                ? "Original file, extracted text, and structured JSON saved in your encrypted private vault."
                 : "Analysis generated from the uploaded document. Review before acting."}
             </small>
           </aside>
