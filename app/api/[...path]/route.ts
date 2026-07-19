@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { apiFailure, rateLimit, resumeFileFromForm } from "@/app/api/_utils";
 import type { AssessmentAnswers, CareerMatch, Job } from "@/lib/types";
 import { privateJson, requireVerifiedUser, validateMutationOrigin } from "@/server/auth";
+import { adminSession } from "@/server/admin-access";
 import {
   createUserApplication, deleteUserApplication, getPrivateData, listUserApplications,
   saveAssessmentMatches, saveResumeAnalysis, updateUserApplication,
@@ -223,6 +224,7 @@ async function importedJobsOrEmpty(options: Parameters<typeof listImportedJobs>[
 }
 function dedupeJobs(items: Job[]) { return [...new Map(items.map((job) => [job.applyUrl.replace(/\/?apply\/?$/, "").replace(/\/$/, ""), job])).values()]; }
 function requireAdmin(request: Request) {
+  if (adminSession(request)) return null;
   const configured = process.env.SCRAPER_ADMIN_TOKEN || "";
   if (configured.length < 16) return Response.json({ message: "Set SCRAPER_ADMIN_TOKEN to manage job sources." }, { status: 503 });
   return secureMatch(request.headers.get("x-admin-token") || "", configured) ? null : Response.json({ message: "Invalid job-source admin token." }, { status: 401 });

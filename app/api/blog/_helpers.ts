@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { privateJson } from "@/server/auth";
+import { adminSession } from "@/server/admin-access";
 
 export const blogInputSchema = z.object({
   slug: z.string().max(160).optional(), title: z.string().trim().min(10).max(180), excerpt: z.string().trim().min(40).max(400),
@@ -12,6 +13,7 @@ export const blogInputSchema = z.object({
 });
 
 export function requireBlogAdmin(request: Request) {
+  if (adminSession(request)) return null;
   const expected = process.env.BLOG_ADMIN_TOKEN || ""; const provided = request.headers.get("x-admin-token") || "";
   if (expected.length < 24) return privateJson({ message: "Set BLOG_ADMIN_TOKEN to manage articles." }, 503);
   const left = Buffer.from(provided); const right = Buffer.from(expected);
