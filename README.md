@@ -113,7 +113,7 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 | `SCRAPER_ADMIN_TOKEN`, `CRON_SECRET` | Job-source administration and scheduled refreshes |
 | `BLOG_ADMIN_TOKEN` | Blog administration |
 
-`/admin` is separate from user accounts. Enter the configured administrator email, username, and password; the server sends a confirmation link to `ADMIN_EMAIL`, which opens the control centre in that browser.
+`/admin` is separate from user accounts. Enter the configured administrator email, username, and password; the server sends a confirmation link to `ADMIN_EMAIL`, which opens the private sidebar control centre in that browser. All user, resume, job, and blog management APIs validate the signed administrator cookie.
 
 ## Safe authentication rollout
 
@@ -128,7 +128,7 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 - Put the service behind HTTPS and a reverse proxy with request-body limits.
 - SQLite and the local JSON store remain the development fallback. Production uses MySQL/MariaDB for jobs and account-isolated private data.
 - MySQL schema bootstrap is non-destructive and uses `CREATE TABLE IF NOT EXISTS`. Run `npm run migrate:mysql` once to copy existing SQLite jobs and local state after configuring MySQL.
-- Uploaded resumes are parsed from memory and are not written by the application. With accounts enabled, only the structured profile and ranked results are retained per user.
+- With accounts enabled, uploaded PDF/DOCX resumes are AES-256-GCM encrypted with a key derived from `AUTH_SECRET` and stored in the private `user_resume_files` table. Only the confirmed administrator session can retrieve a preview; structured profiles and ranked results remain isolated per user.
 - Session tokens are random, stored only as SHA-256 hashes, and delivered in `HttpOnly`, `SameSite=Lax`, production `Secure` cookies. Passwords use Argon2id.
 - Email verification and password-reset tokens are random, hashed in storage, expire, and can be used only once.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.

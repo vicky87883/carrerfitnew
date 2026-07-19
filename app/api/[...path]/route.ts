@@ -15,6 +15,7 @@ import {
 } from "@/server/job-database";
 import { identifyJobSource, ScrapeError, scrapeJobSource, validateJobSourceUrl } from "@/server/job-scraper";
 import { extractResumeText } from "@/server/resume";
+import { saveResumeFile } from "@/server/resume-vault";
 import { readStore, writeStore } from "@/server/store";
 
 export const runtime = "nodejs";
@@ -124,7 +125,7 @@ async function analyzeResume(request: Request) {
   const text = await extractResumeText(file); const imported = await importedJobsOrEmpty({ limit: 80 });
   const availableJobs = dedupeJobs([...jobs, ...imported.jobs]);
   const analysis = await analyzeResumeWithGroq(text, availableJobs); const rankedJobs = hydrateRankedJobs(availableJobs, analysis);
-  if (auth.user) await saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs);
+  if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file)]);
   return privateJson({ profile: analysis.profile, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
 }
 

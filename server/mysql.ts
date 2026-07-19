@@ -132,6 +132,12 @@ async function ensureMysqlSchema(target: Pool) {
         updated_at DATETIME(3) NOT NULL,
         CONSTRAINT admin_mfa_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS admin_access_tokens (
+        token_hash CHAR(64) PRIMARY KEY,
+        expires_at DATETIME(3) NOT NULL,
+        created_at DATETIME(3) NOT NULL,
+        KEY admin_access_tokens_expiry_idx (expires_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS auth_tokens (
         token_hash CHAR(64) PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
@@ -149,6 +155,17 @@ async function ensureMysqlSchema(target: Pool) {
         assessment_matches LONGTEXT NULL,
         updated_at DATETIME(3) NOT NULL,
         CONSTRAINT user_private_data_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS user_resume_files (
+        user_id VARCHAR(36) PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        mime_type VARCHAR(120) NOT NULL,
+        size_bytes INT UNSIGNED NOT NULL,
+        encrypted_data LONGBLOB NOT NULL,
+        iv VARBINARY(12) NOT NULL,
+        auth_tag VARBINARY(16) NOT NULL,
+        uploaded_at DATETIME(3) NOT NULL,
+        CONSTRAINT user_resume_files_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS user_applications (
         id VARCHAR(36) PRIMARY KEY,
