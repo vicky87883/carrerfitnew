@@ -94,7 +94,13 @@ export function safeNext(value: string | null) { return value?.startsWith("/") &
 export function privateJson(body: unknown, status = 200, headers: HeadersInit = {}) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store, private", "Pragma": "no-cache", ...headers } });
 }
-export function appUrl(path: string) { return new URL(path, process.env.APP_URL || process.env.WEB_URL || "http://localhost:3000").toString(); }
+export function appUrl(path: string) {
+  const configured = [process.env.APP_URL, ...(process.env.WEB_URL || "").split(",")].map((value) => value?.trim()).filter((value): value is string => Boolean(value));
+  for (const value of configured) {
+    try { const url = new URL(value); if (url.hostname !== "0.0.0.0" && url.hostname !== "127.0.0.1") return new URL(path, url).toString(); } catch { /* try the next configured origin */ }
+  }
+  return new URL(path, process.env.NODE_ENV === "production" ? "https://carrerfit.com" : "http://localhost:3000").toString();
+}
 
 function sha256(value: string) { return createHash("sha256").update(value).digest("hex"); }
 async function verifyScrypt(hash: string, password: string) {
