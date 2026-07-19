@@ -21,6 +21,13 @@ const nextConfig = {
         { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
         { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
       ],
+    }, {
+      source: "/api/:path*",
+      headers: [
+        { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet" },
+        { key: "Cache-Control", value: "private, no-store, max-age=0" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ],
     }];
   },
   async rewrites() {

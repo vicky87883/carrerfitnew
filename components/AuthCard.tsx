@@ -44,6 +44,7 @@ export default function AuthCard({ mode }: { mode: Mode }) {
         {mode === "login" && <Link className="authSmallLink" href="/forgot-password">Forgot password?</Link>}
         <button disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <>{mode === "login" ? "Sign in securely" : mode === "register" ? "Create secure account" : mode === "forgot" ? "Send reset link" : "Update password"}<ArrowRight/></>}</button>
       </form>
+      <p className="authSafety">CarrerFit only accepts account passwords on <strong>carrerfit.com</strong>. We never ask you to install software, provide payment details, or share a verification code.</p>
       <footer>{mode === "login" ? <>New to CarrerFit? <Link href="/register">Create an account</Link></> : mode === "register" ? <>Already have an account? <Link href="/login">Sign in</Link></> : <>Remember your password? <Link href="/login">Back to sign in</Link></>}</footer>
     </article>
   </section></main>;

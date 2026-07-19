@@ -94,8 +94,9 @@ Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** 
 | `/assessment` | Career assessment | Verified session |
 | `/interview` | Resume-aware AI interview practice | Verified session |
 | `/admin` | Private application-management console | Admin credentials, email confirmation, then admin session |
-| `/job-sources` | Legacy job-source management workspace | Admin session or `SCRAPER_ADMIN_TOKEN` |
-| `/blog-admin` | Legacy blog publishing workspace | Admin session or `BLOG_ADMIN_TOKEN` |
+| `/job-sources` | Legacy job-source workspace; redirects to `/admin` in production | Admin console |
+| `/blog-admin` | Legacy publishing workspace; redirects to `/admin` in production | Admin console |
+| `/privacy` | Resume, account, AI, camera, retention, and safety disclosures | Public |
 
 ### Discovery and browser assets
 

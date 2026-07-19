@@ -68,8 +68,8 @@ export default function Home() {
               <Link href="/jobs">Browse live roles</Link>
             </div>
             <div className="trustRow">
-              <div><span className="miniAvatars"><i>AK</i><i>NS</i><i>RM</i></span><strong>4.9/5</strong></div>
-              <p>Trusted by 12,000+ professionals navigating their next move.</p>
+              <div><ShieldCheck size={21}/><strong>Private by design</strong></div>
+              <p>Encrypted resume storage, verified accounts, and employer-hosted applications.</p>
             </div>
           </div>
 
@@ -95,14 +95,14 @@ export default function Home() {
             <div className="stageNote noteTwo"><CircleCheck size={18}/><span>Profile scan complete</span></div>
           </div>
         </div>
-        <div className="signalBar"><span>Built for ambitious people at</span><div><b>northstar</b><b>VERTEX</b><b>paperplane</b><b>BrightLoop</b><b>orbit°</b></div></div>
+        <div className="signalBar"><span>Job-source support</span><div><b>Lever</b><b>Greenhouse</b><b>Ashby</b><b>JSON-LD</b><b>Company careers</b></div></div>
       </section>
 
       <section className="proofStrip">
-        <article><strong>18k+</strong><span>career paths mapped</span></article>
-        <article><strong>94%</strong><span>report clearer direction</span></article>
-        <article><strong>3.2×</strong><span>more focused applications</span></article>
-        <article><strong>30 days</strong><span>to a credible action plan</span></article>
+        <article><strong>PDF + DOCX</strong><span>validated resume parsing</span></article>
+        <article><strong>AES-256</strong><span>encrypted private storage</span></article>
+        <article><strong>Evidence</strong><span>skills linked to resume text</span></article>
+        <article><strong>30 days</strong><span>automatic stale-job cleanup</span></article>
       </section>
 
       <section className="modernSection methodSection">
@@ -124,11 +124,11 @@ export default function Home() {
         <Link className="allRoles" href="/resume">Get my resume-ranked roles <ArrowRight size={17}/></Link>
       </section>
 
-      <section className="quoteSection"><span>“</span><blockquote>CarrerFit.com helped me stop applying everywhere and start positioning myself for the roles I could actually win.</blockquote><div><i>SR</i><p><strong>Shruti Rao</strong><span>Product Analyst · Bengaluru</span></p></div></section>
+      <section className="quoteSection"><span><ShieldCheck/></span><blockquote>Your resume is sensitive career data. CarrerFit encrypts the original file, extracted text, and detailed resume document, keeps sessions server-side, and sends applications only to the employer&apos;s own page.</blockquote><div><i>CF</i><p><strong>Privacy by design</strong><span>No fabricated hiring guarantees · No automatic applications</span></p></div></section>
 
       <section className="modernCta"><div><span className="modernEyebrow"><Sparkles size={14}/> Your next move starts here</span><h2>Know where you fit.<br/>Build what matters.</h2></div><div><p>Upload your resume and get evidence-based matches to verified opportunities.</p><Link href="/resume">Match my resume free <ArrowRight/></Link><small>PDF or DOCX · Secure processing · No credit card</small></div></section>
 
-      <footer className="modernFooter"><Link className="modernBrand" href="/"><span><Target size={20}/></span>CarrerFit.com</Link><p>Career intelligence for better decisions.</p><div><Link href="/resume">Resume match</Link><Link href="/jobs">Jobs</Link><Link href="/blog">Career guides</Link><Link href="/assessment">Assessment</Link><Link href="/dashboard">Dashboard</Link></div><span>© 2026 CarrerFit.com</span></footer>
+      <footer className="modernFooter"><Link className="modernBrand" href="/"><span><Target size={20}/></span>CarrerFit.com</Link><p>Career intelligence for better decisions.</p><div><Link href="/resume">Resume match</Link><Link href="/jobs">Jobs</Link><Link href="/blog">Career guides</Link><Link href="/privacy">Privacy</Link><Link href="/dashboard">Dashboard</Link></div><span>© 2026 CarrerFit.com</span></footer>
     </main>
   );
 }
