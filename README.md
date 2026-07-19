@@ -72,33 +72,113 @@ Environment variables:
 
 Copy `.env.example` to `.env` and add the Groq key before starting the API. Without a key, resume parsing and deterministic ranking still work and the result identifies itself as skills-based.
 
-## Public routes
+## Complete route reference
 
-- `/`, `/resume`, `/interview`, `/jobs`, `/assessment`, `/dashboard`
-- `/register`, `/login`, `/forgot-password`, `/reset-password`
-- `/blog` and `/blog/[slug]`
-- `/sitemap.xml`, `/robots.txt`, `/rss.xml`, `/manifest.webmanifest`
-- `/api/health`
+Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** means a confirmed user account with the signed `HttpOnly` session cookie. **Admin session** means the separate `/admin` confirmation flow and its signed `HttpOnly` administrator cookie. Mutating browser requests also require a valid same-origin request.
 
-The publishing workspace is available at `/blog-admin` and requires `BLOG_ADMIN_TOKEN`. Draft articles are never included in public blog responses, search metadata, the sitemap, or RSS.
+### Website pages
 
-## Route and API reference
-
-| Area | Routes | Access |
+| Route | Purpose | Access |
 | --- | --- | --- |
-| Public website | `/`, `/jobs`, `/jobs/[id]`, `/blog`, `/blog/[slug]` | Public |
-| Account | `/register`, `/login`, `/forgot-password`, `/reset-password` | Public; rate limited |
-| Private workspace | `/dashboard`, `/resume`, `/assessment`, `/interview` | Verified account when `AUTH_REQUIRED=true` |
-| Administrator control centre | `/admin` | Separate administrator email, username, password, and email-confirmed session |
-| Job administration | `/admin` → Jobs & scraping | Confirmed administrator session |
-| Blog administration | `/admin` → Blog publishing | Confirmed administrator session |
-| Health | `GET /api/health` | Public; reports configuration without secrets |
-| Account API | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/verify`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/resend-verification` | Session cookie or one-time verification token where applicable |
-| Product API | `/api/resume/analyze`, `/api/assessment`, `/api/interview/start`, `/api/interview/respond`, `/api/dashboard`, `/api/applications` | Verified session when required |
-| Jobs API | `GET /api/jobs`, `GET /api/jobs/[id]` | Public |
-| Source API | `/api/job-sources`, `/api/job-sources/scrape-all`, `/api/job-sources/[id]/scrape` | Header `x-admin-token: SCRAPER_ADMIN_TOKEN` |
-| Scheduled import | `POST /api/cron/job-sources` | Header `x-cron-secret: CRON_SECRET` |
-| Blog API | `/api/blog`, `/api/blog/[slug]` | Public reads; writes use `x-admin-token: BLOG_ADMIN_TOKEN` |
+| `/` | Marketing homepage | Public |
+| `/jobs` | Search and filter active jobs | Public |
+| `/jobs/[id]` | Job details and original employer application link | Public |
+| `/blog` | Published career guides | Public |
+| `/blog/[slug]` | Published guide detail | Public |
+| `/register` | Account registration | Public; rate limited |
+| `/login` | User sign-in | Public; rate limited |
+| `/forgot-password` | Request a password-reset email | Public; rate limited |
+| `/reset-password?token=...` | Complete a one-time password reset | Public with valid one-time token |
+| `/dashboard` | Private resume intelligence, matches, and application pipeline | Verified session |
+| `/resume` | PDF/DOCX upload and AI resume matching | Verified session |
+| `/assessment` | Career assessment | Verified session |
+| `/interview` | Resume-aware AI interview practice | Verified session |
+| `/admin` | Private application-management console | Admin credentials, email confirmation, then admin session |
+| `/job-sources` | Legacy job-source management workspace | Admin session or `SCRAPER_ADMIN_TOKEN` |
+| `/blog-admin` | Legacy blog publishing workspace | Admin session or `BLOG_ADMIN_TOKEN` |
+
+### Discovery and browser assets
+
+| Method | Route | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/sitemap.xml` | Public pages and published blog sitemap | Public |
+| `GET` | `/robots.txt` | Search-crawler rules | Public |
+| `GET` | `/rss.xml` | Latest published career guides | Public |
+| `GET` | `/manifest.webmanifest` | Progressive web-app metadata | Public |
+| `GET` | `/favicon.ico` | CarrerFit favicon | Public |
+| `GET` | `/opengraph-image` | Social-sharing image | Public |
+
+### Health and authentication API
+
+| Method | Route | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/health` | Reports AI, authentication, mail, and database readiness without returning secrets | Public |
+| `GET` | `/api/auth/config` | Returns public authentication configuration flags | Public |
+| `GET` | `/api/auth/me` | Returns the current verified user and authentication state | Session cookie optional |
+| `GET` | `/api/auth/verify?token=...` | Consumes an email-verification token, creates a session, and redirects to the dashboard | Valid one-time token |
+| `POST` | `/api/auth/register` | Creates an account and sends verification mail | Public; rate limited |
+| `POST` | `/api/auth/login` | Validates credentials and creates a signed session cookie | Public; rate limited |
+| `POST` | `/api/auth/logout` | Revokes the current session and clears its cookie | Session cookie |
+| `POST` | `/api/auth/forgot-password` | Sends a one-time reset link when an eligible account exists | Public; rate limited |
+| `POST` | `/api/auth/reset-password` | Consumes a reset token, updates the Argon2id password, and revokes existing sessions | Valid one-time token; rate limited |
+| `POST` | `/api/auth/resend-verification` | Sends a replacement verification link for an unverified account | Public; rate limited |
+
+### Jobs, resume, assessment, and dashboard API
+
+| Method | Route | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/jobs?q=&category=&mode=` | Lists curated and imported active jobs with optional filters | Public |
+| `GET` | `/api/jobs/[id]` | Returns one curated or imported job | Public |
+| `POST` | `/api/resume/analyze` | Parses a PDF/DOCX, runs validated Groq extraction, stores encrypted resume intelligence, and returns ranked jobs | Verified session; multipart form; rate limited |
+| `POST` | `/api/assessment` | Generates and stores career matches from assessment answers | Verified session |
+| `GET` | `/api/dashboard` | Returns the current user's private profile, resume document, matches, applications, and statistics | Verified session |
+| `POST` | `/api/applications` | Saves a job to the user's pipeline | Verified session |
+| `PATCH` | `/api/applications/[id]` | Changes status to `Saved`, `Applied`, `Interview`, or `Offer` | Verified session; owner only |
+| `DELETE` | `/api/applications/[id]` | Removes a job from the user's pipeline | Verified session; owner only |
+| `POST` | `/api/interview/start` | Creates a tailored interview plan from an uploaded resume or saved profile | Verified session; multipart form; rate limited |
+| `POST` | `/api/interview/respond` | Evaluates an answer and returns the next question or final report | Verified session; rate limited |
+
+### Administrator API
+
+| Method | Route | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/admin/status` | Reports whether administrator access is configured and whether this browser is authenticated | Public; returns no credentials |
+| `POST` | `/api/admin/request-access` | Validates the separate administrator credentials and emails a one-time confirmation link | Admin credentials; rate limited |
+| `GET` | `/api/admin/confirm?token=...` | Consumes the one-time confirmation token, sets the admin cookie, and redirects to `/admin` | Valid one-time token |
+| `GET` | `/api/admin/overview` | Returns user, active-job, source, and published-post totals | Admin session |
+| `GET` | `/api/admin/users` | Lists registered users, verification/login state, activity, applications, and resume summaries | Admin session |
+| `GET` | `/api/admin/resume/[userId]` | Decrypts and previews a user's stored resume file | Admin session; private/no-store response |
+| `POST` | `/api/admin/manual-job` | Creates and publishes a normalized manual job record | Admin session |
+| `POST` | `/api/admin/cleanup-jobs` | Deletes imported jobs not seen for more than 30 days | Admin session |
+| `POST` | `/api/admin/logout` | Clears the separate administrator session cookie | Admin session |
+
+### Job-source ingestion API
+
+These routes accept either the confirmed admin cookie or `x-admin-token: <SCRAPER_ADMIN_TOKEN>`. They accept only validated public HTTPS targets and apply SSRF, redirect, response-size, and robots.txt controls.
+
+| Method | Route | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/job-sources` | Returns source health, import statistics, and recent jobs | Admin session or scraper token |
+| `POST` | `/api/job-sources` | Creates or reuses a source, scrapes it immediately, and stores normalized jobs | Admin session or scraper token; rate limited |
+| `POST` | `/api/job-sources/scrape-all` | Refreshes every enabled source | Admin session or scraper token; rate limited |
+| `POST` | `/api/job-sources/[id]/scrape` | Refreshes one source | Admin session or scraper token; rate limited |
+| `PATCH` | `/api/job-sources/[id]` | Enables or disables one source | Admin session or scraper token |
+| `DELETE` | `/api/job-sources/[id]` | Deletes one source and its imported jobs | Admin session or scraper token |
+| `POST` | `/api/cron/job-sources` | Scheduled refresh endpoint | `x-cron-secret: <CRON_SECRET>` |
+
+### Blog API
+
+Public reads return only published posts. Administrator reads and writes accept either the confirmed admin cookie or `x-admin-token: <BLOG_ADMIN_TOKEN>`. Draft posts never appear in public API results, RSS, sitemap, or page metadata.
+
+| Method | Route | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/blog?category=...` | Lists published posts, optionally filtered by category | Public |
+| `GET` | `/api/blog/[slug]` | Returns one published post | Public |
+| `GET` | `/api/blog?admin=1` | Lists drafts and published posts | Admin session or blog token |
+| `GET` | `/api/blog/[slug]?admin=1` | Returns a draft or published post for editing | Admin session or blog token |
+| `POST` | `/api/blog` | Creates a draft or published post | Admin session or blog token; rate limited |
+| `PATCH` | `/api/blog/[slug]` | Updates a post and revalidates affected public pages | Admin session or blog token; rate limited |
+| `DELETE` | `/api/blog/[slug]` | Deletes a post and revalidates affected public pages | Admin session or blog token |
 
 ### Hostinger production variables
 
