@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { identifyJobSource, parseStructuredJobPage, validateJobSourceUrl } from "../server/job-scraper.js";
+import { identifyJobSource, parseGenericJobPage, parseStructuredJobPage, validateJobSourceUrl } from "../server/job-scraper.js";
 
 async function main() {
   const directory = await mkdtemp(join(tmpdir(), "carrerfit-jobs-"));
@@ -22,6 +22,8 @@ async function main() {
     }</script></head></html>`;
     const parsed = await parseStructuredJobPage(html, "https://careers.example.com/jobs/42", "Acme");
     if (parsed.length !== 1 || parsed[0].title !== "Senior Data Analyst" || parsed[0].workMode !== "Remote") throw new Error("JobPosting parser failed.");
+    const embedded = await parseGenericJobPage(`<script id="__NEXT_DATA__" type="application/json">{"props":{"jobs":[{"jobTitle":"Product Engineer","jobDescription":"Build and maintain TypeScript services, React interfaces, APIs, automated tests, and reliable production systems with a collaborative product team.","jobUrl":"/careers/jobs/product-engineer","companyName":"Acme","location":"Remote"}]}}</script>`, "https://careers.example.com/jobs", "Acme");
+    if (embedded.length !== 1 || embedded[0].title !== "Product Engineer") throw new Error("Embedded application-data parser failed.");
     const source = await database.createJobSource({ name: "Acme Analytics", url: "https://careers.example.com/jobs/42", type: "Structured data" });
     await database.replaceSourceJobs(source, parsed);
     const jobs = await database.listImportedJobs({ q: "analyst" });

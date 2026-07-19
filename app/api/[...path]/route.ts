@@ -10,7 +10,7 @@ import {
 import { jobs } from "@/server/data/jobs";
 import { analyzeResumeWithGroq, hydrateRankedJobs } from "@/server/groq";
 import {
-  createJobSource, deleteJobSource, getImportedJob, getJobSource, getJobSourceOverview,
+  createJobSource, deleteJobSource, findJobSourceByUrl, getImportedJob, getJobSource, getJobSourceOverview,
   listImportedJobs, listJobSources, setJobSourceEnabled,
 } from "@/server/job-database";
 import { identifyJobSource, ScrapeError, scrapeJobSource, validateJobSourceUrl } from "@/server/job-scraper";
@@ -135,7 +135,11 @@ async function addSource(request: Request) {
   await validateJobSourceUrl(url); const identified = identifyJobSource(url, name);
   let source;
   try { source = await createJobSource(identified); }
-  catch (error) { if (error instanceof Error && error.message.includes("UNIQUE")) return Response.json({ message: "This job source already exists." }, { status: 409 }); throw error; }
+  catch (error) {
+    if (!(error instanceof Error && error.message.includes("UNIQUE"))) throw error;
+    source = await findJobSourceByUrl(identified.url);
+    if (!source) return Response.json({ message: "This source already exists but could not be loaded." }, { status: 409 });
+  }
   try {
     const result = await runSourceScrape(source.id);
     return Response.json({ source: await getJobSource(source.id), imported: result.imported }, { status: 201 });

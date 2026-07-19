@@ -82,6 +82,12 @@ export async function getJobSource(id: string) {
   return row ? mapSource(row) : null;
 }
 
+export async function findJobSourceByUrl(url: string) {
+  const query = `SELECT s.*, (SELECT COUNT(*) FROM imported_jobs j WHERE j.source_id=s.id AND j.active=1) active_job_count FROM job_sources s WHERE s.url=? LIMIT 1`;
+  if (databaseBackend() === "mysql") { const [rows] = await (await getMysqlPool()).execute<(SourceRow & RowDataPacket)[]>(query, [url]); return rows[0] ? mapSource(rows[0]) : null; }
+  const row = getSqliteJobDatabase().prepare(query).get(url) as SourceRow | undefined; return row ? mapSource(row) : null;
+}
+
 export async function listJobSources() {
   const query = `SELECT s.*, (SELECT COUNT(*) FROM imported_jobs j WHERE j.source_id=s.id AND j.active=1) active_job_count FROM job_sources s ORDER BY s.created_at DESC`;
   if (databaseBackend() === "mysql") {

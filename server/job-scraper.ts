@@ -8,6 +8,8 @@ import { markSourceFailed, markSourceRunning, replaceSourceJobs } from "./job-da
 const USER_AGENT = "CarrerFitJobIndexer/1.0 (+https://carrerfit.com)";
 const MAX_RESPONSE_BYTES = 3 * 1024 * 1024;
 const MAX_JOBS = 300;
+const MAX_DISCOVERED_PAGES = 24;
+const robotsCache = new Map<string, Promise<string>>();
 
 export function identifyJobSource(rawUrl: string, providedName = "") {
   const url = normalizeUrl(rawUrl);
@@ -105,7 +107,69 @@ export async function parseStructuredJobPage(html: string, pageUrl: string, fall
 async function scrapeStructuredData(source: JobSource) {
   if (!(await robotsAllows(new URL(source.url)))) throw new ScrapeError("This website's robots.txt does not allow automated access to this page.", 403);
   const html = await fetchText(source.url);
-  return parseStructuredJobPage(html, source.url, source.name);
+  const direct = await parseGenericJobPage(html, source.url, source.name);
+  if (direct.length) return direct;
+  const links = discoverJobLinks(html, source.url).slice(0, MAX_DISCOVERED_PAGES);
+  const discovered: ImportedJob[] = [];
+  for (let index = 0; index < links.length; index += 6) {
+    const batch = await Promise.allSettled(links.slice(index, index + 6).map(async (url) => {
+      if (!(await robotsAllows(new URL(url)))) return [];
+      const page = await fetchText(url); return parseGenericJobPage(page, url, source.name);
+    }));
+    for (const result of batch) if (result.status === "fulfilled") discovered.push(...result.value);
+  }
+  return dedupe(discovered);
+}
+
+export async function parseGenericJobPage(html: string, pageUrl: string, fallbackCompany = "Company") {
+  return dedupe([...(await parseStructuredJobPage(html, pageUrl, fallbackCompany)), ...parseEmbeddedJobs(html, pageUrl, fallbackCompany), ...parseSemanticJobPage(html, pageUrl, fallbackCompany)]);
+}
+
+function parseEmbeddedJobs(html: string, pageUrl: string, fallbackCompany: string) {
+  const $ = load(html); const records: Record<string, unknown>[] = [];
+  $('script[type="application/json"],script#__NEXT_DATA__,script#__NUXT_DATA__').each((_index, element) => {
+    const text = $(element).text().trim(); if (!text || text.length > 2_500_000) return;
+    try { collectJobLikeRecords(JSON.parse(text), records); } catch { /* non-JSON application state is ignored */ }
+  });
+  return records.flatMap((record) => normalizeJobLikeRecord(record, pageUrl, fallbackCompany));
+}
+
+function parseSemanticJobPage(html: string, pageUrl: string, fallbackCompany: string): ImportedJob[] {
+  const $ = load(html); const url = new URL(pageUrl);
+  const title = firstText($, ["h1[data-testid*=title]", "h1[class*=job]", "main h1", "article h1", "h1"]);
+  const description = firstText($, ["[data-testid*=description]", "[class*=job-description]", "[class*=jobDescription]", "#job-description", "article", "main"]);
+  const applyHref = firstHref($, ["a[data-testid*=apply]", "a[class*=apply]", "a[href*='apply']"]);
+  const jobSignal = /\/(jobs?|careers?|positions?|openings?|vacanc(?:y|ies))(?:\/|$)/i.test(url.pathname) || Boolean(applyHref) || $("[class*=job-description],[data-testid*=description]").length > 0;
+  if (!jobSignal || title.length < 3 || description.length < 100) return [];
+  const company = firstText($, ["[data-testid*=company]", "[class*=company]", "meta[property='og:site_name']"]) || fallbackCompany;
+  const location = firstText($, ["[data-testid*=location]", "[class*=location]", "[itemprop=jobLocation]"]) || "Location not specified";
+  const applyUrl = absoluteUrl(applyHref || pageUrl, pageUrl); if (!applyUrl) return [];
+  return [normalizeJob({ externalId: stableId(applyUrl), title, company, location, description, applyUrl, postedAt: null })];
+}
+
+function discoverJobLinks(html: string, pageUrl: string) {
+  const $ = load(html); const base = new URL(pageUrl); const links = new Set<string>();
+  $("a[href]").each((_index, element) => {
+    const href = $(element).attr("href") || "";
+    try { const url = new URL(href, base); if (url.origin !== base.origin || !/^https:$/.test(url.protocol)) return; if (!/\/(jobs?|careers?|positions?|openings?|vacanc(?:y|ies))(?:\/|[-?=])/i.test(`${url.pathname}${url.search}`)) return; if (/\/(results?|search)(?:\/|$)/i.test(url.pathname)) return; url.hash = ""; links.add(url.toString()); } catch { /* invalid links are ignored */ }
+  });
+  return [...links];
+}
+
+function collectJobLikeRecords(value: unknown, output: Record<string, unknown>[], depth = 0) {
+  if (depth > 12 || output.length > MAX_JOBS * 2) return;
+  if (Array.isArray(value)) { for (const item of value) collectJobLikeRecords(item, output, depth + 1); return; }
+  if (!isRecord(value)) return;
+  const title = recordString(value, ["jobTitle", "title", "positionTitle"]); const description = recordString(value, ["jobDescription", "description", "content", "descriptionPlain"]); const url = recordString(value, ["applyUrl", "jobUrl", "absolute_url", "url"]);
+  if (title.length >= 3 && (description.length >= 80 || url.length > 0)) output.push(value);
+  for (const child of Object.values(value)) if (child && typeof child === "object") collectJobLikeRecords(child, output, depth + 1);
+}
+
+function normalizeJobLikeRecord(value: Record<string, unknown>, pageUrl: string, fallbackCompany: string): ImportedJob[] {
+  const title = recordString(value, ["jobTitle", "title", "positionTitle"]); const description = stripHtml(recordString(value, ["jobDescription", "description", "content", "descriptionPlain"]));
+  const applyUrl = absoluteUrl(recordString(value, ["applyUrl", "jobUrl", "absolute_url", "url"]) || pageUrl, pageUrl);
+  if (title.length < 3 || description.length < 80 || !applyUrl) return [];
+  return [normalizeJob({ externalId: recordString(value, ["id", "jobId", "identifier"]) || stableId(applyUrl), title, company: recordString(value, ["company", "companyName", "organizationName"]) || fallbackCompany, location: recordString(value, ["location", "locationName", "city"]) || "Location not specified", description, applyUrl, postedAt: recordString(value, ["datePosted", "publishedAt", "createdAt"]) || null, department: recordString(value, ["department", "team"]), commitment: recordString(value, ["employmentType", "commitment"]), remote: Boolean(value.isRemote) })];
 }
 
 function normalizeJob(input: { externalId: string; title: string; company: string; location: string; description: string; applyUrl: string; postedAt: string | null; department?: string; commitment?: string; remote?: boolean; requirements?: string[] }): ImportedJob {
@@ -145,7 +209,8 @@ async function fetchText(rawUrl: string, redirects = 0): Promise<string> {
 
 async function robotsAllows(url: URL) {
   try {
-    const robots = await fetchText(`${url.origin}/robots.txt`);
+    let pending = robotsCache.get(url.origin); if (!pending) { pending = fetchText(`${url.origin}/robots.txt`); robotsCache.set(url.origin, pending); }
+    const robots = await pending;
     let applies = false;
     for (const raw of robots.split(/\r?\n/)) {
       const line = raw.split("#")[0].trim(); const [field, ...rest] = line.split(":"); const value = rest.join(":").trim();
@@ -207,6 +272,9 @@ function stringValue(value: unknown) { return typeof value === "string" || typeo
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function titleCase(value: string) { return value.replace(/\b\w/g, (character) => character.toUpperCase()); }
 function dedupe(jobs: ImportedJob[]) { return [...new Map(jobs.filter((job) => job.title && job.applyUrl).map((job) => [`${job.externalId}:${job.applyUrl}`, job])).values()]; }
+function recordString(value: Record<string, unknown>, keys: string[]) { for (const key of keys) { const item = value[key]; if (typeof item === "string" || typeof item === "number") return String(item).trim(); if (isRecord(item) && typeof item.name === "string") return item.name.trim(); } return ""; }
+function firstText($: ReturnType<typeof load>, selectors: string[]) { for (const selector of selectors) { const element = $(selector).first(); const value = element.is("meta") ? element.attr("content")?.trim() : element.text().replace(/\s+/g, " ").trim(); if (value) return value; } return ""; }
+function firstHref($: ReturnType<typeof load>, selectors: string[]) { for (const selector of selectors) { const value = $(selector).first().attr("href")?.trim(); if (value) return value; } return ""; }
 
 type LeverJob = { id: string; text: string; categories?: { location?: string; allLocations?: string[]; commitment?: string; team?: string; department?: string }; descriptionPlain?: string; lists?: { text: string; content: string }[]; hostedUrl: string; applyUrl: string; createdAt?: number };
 type GreenhouseJob = { id: number; title: string; updated_at?: string; location?: { name?: string }; absolute_url: string; content?: string; departments?: { name: string }[]; offices?: { name?: string; location?: string }[] };
