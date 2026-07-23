@@ -9,10 +9,11 @@ import {
 } from "@/server/auth-store";
 import { jobs } from "@/server/data/jobs";
 import { analyzeAts } from "@/server/ats";
+import { runJobBot } from "@/server/job-bot";
 import { analyzeResumeWithGroq, hydrateRankedJobs } from "@/server/groq";
 import {
   createJobSource, deleteJobSource, findJobSourceByUrl, getImportedJob, getJobSource, getJobSourceOverview,
-  listImportedJobs, listJobSources, setJobSourceEnabled,
+  listImportedJobs, setJobSourceEnabled,
 } from "@/server/job-database";
 import { identifyJobSource, ScrapeError, scrapeJobSource, validateJobSourceUrl } from "@/server/job-scraper";
 import { extractResumeText } from "@/server/resume";
@@ -151,9 +152,7 @@ async function addSource(request: Request) {
 }
 
 async function scrapeAll() {
-  const enabled = (await listJobSources()).filter((source) => source.enabled);
-  const results = await Promise.allSettled(enabled.map((source) => runSourceScrape(source.id)));
-  return Response.json({ refreshed: fulfilled(results), failed: rejected(results), overview: await getJobSourceOverview() });
+  return Response.json(await runJobBot("admin"));
 }
 async function scrapeOne(id: string) {
   const source = await getJobSource(id); if (!source) return Response.json({ message: "Job source not found." }, { status: 404 });
@@ -161,10 +160,7 @@ async function scrapeOne(id: string) {
 }
 async function cronScrape(request: Request) {
   if (!secureMatch(request.headers.get("x-cron-secret") || "", process.env.CRON_SECRET || "")) return Response.json({ message: "Invalid cron credential." }, { status: 401 });
-  const enabled = (await listJobSources()).filter((source) => source.enabled);
-  const startedAt = new Date().toISOString();
-  const results = await runWithConcurrency(enabled.map((source) => source.id), 3, runSourceScrape);
-  return Response.json({ ok: rejected(results) === 0, startedAt, finishedAt: new Date().toISOString(), sources: enabled.length, refreshed: fulfilled(results), failed: rejected(results) });
+  return Response.json(await runJobBot("cron"));
 }
 
 async function createAssessment(request: Request) {
@@ -238,18 +234,5 @@ function requireAdmin(request: Request) {
   return secureMatch(request.headers.get("x-admin-token") || "", configured) ? null : Response.json({ message: "Invalid job-source admin token." }, { status: 401 });
 }
 function secureMatch(value: string, expected: string) { if (!value || !expected) return false; const left = Buffer.from(value); const right = Buffer.from(expected); return left.length === right.length && timingSafeEqual(left, right); }
-function fulfilled(results: PromiseSettledResult<unknown>[]) { return results.filter((result) => result.status === "fulfilled").length; }
-function rejected(results: PromiseSettledResult<unknown>[]) { return results.filter((result) => result.status === "rejected").length; }
-async function runWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
-  const results: PromiseSettledResult<R>[] = new Array(items.length); let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next++;
-      try { results[index] = { status: "fulfilled", value: await worker(items[index]) }; }
-      catch (reason) { results[index] = { status: "rejected", reason }; }
-    }
-  }));
-  return results;
-}
 function notFound() { return Response.json({ message: "API route not found" }, { status: 404 }); }
 function routeFailure(error: unknown) { if (error instanceof ScrapeError) return Response.json({ message: error.message }, { status: error.status }); return apiFailure(error); }

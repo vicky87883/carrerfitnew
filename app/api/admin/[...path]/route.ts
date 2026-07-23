@@ -1,9 +1,9 @@
 import { rateLimit } from "@/app/api/_utils";
-import { adminConfigured, adminCredentialsValid, adminSession, clearAdminCookie, confirmationValid, createAdminCookie, createConfirmationToken } from "@/server/admin-access";
+import { adminCredentialsValid, adminLoginConfigured, adminSession, clearAdminCookie, createAdminCookie } from "@/server/admin-access";
 import { privateJson, validateMutationOrigin } from "@/server/auth";
-import { sendAdminAccessEmail } from "@/server/mailer";
 import { databaseBackend, getMysqlPool } from "@/server/mysql";
-import { getSqliteJobDatabase } from "@/server/job-database";
+import { getJobSourceOverview, getSqliteJobDatabase, listJobBotRuns } from "@/server/job-database";
+import { runJobBot } from "@/server/job-bot";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { createHash, randomUUID } from "node:crypto";
 import { getResumeFile } from "@/server/resume-vault";
@@ -14,10 +14,10 @@ type Context = { params: Promise<{ path: string[] }> };
 
 export async function GET(request: Request, context: Context) {
   const parts = (await context.params).path; const path = parts[0] || "status";
-  if (path === "confirm") return confirm(request);
-  if (path === "status") return privateJson({ configured: adminConfigured(), authenticated: adminSession(request), sessionHours: 8 });
+  if (path === "status") return privateJson({ configured: await adminLoginConfigured(), authenticated: adminSession(request), sessionHours: 8 });
   if (!adminSession(request)) return privateJson({ message: "Administrator authentication is required." }, 401);
   if (path === "overview") return overview(request);
+  if (path === "bot") return botStatus(request);
   if (path === "users") return users(request);
   if (path === "resume" && parts[1]) return resumeFile(parts[1]);
   return privateJson({ message: "Admin route not found." }, 404);
@@ -30,22 +30,17 @@ export async function POST(request: Request, context: Context) {
     if (!adminSession(request)) return privateJson({ message: "Administrator authentication is required." }, 401);
     if (path === "cleanup-jobs") return cleanupJobs(request);
     if (path === "manual-job") return manualJob(request);
+    if (path === "run-bot") return privateJson(await runJobBot("admin"));
     if (path === "logout") return privateJson({ ok: true }, 200, { "Set-Cookie": clearAdminCookie() });
     return privateJson({ message: "Admin route not found." }, 404);
   } catch { return privateJson({ message: "The administrator service is temporarily unavailable." }, 503); }
 }
 async function requestAccess(request: Request) {
   const limited = rateLimit(request, "admin-access", 5); if (limited) return limited;
-  if (!adminConfigured()) return privateJson({ message: "Administrator credentials are not configured on the server." }, 503);
-  const body = await request.json() as { email?: string; username?: string; password?: string };
-  if (!adminCredentialsValid(String(body.email || ""), String(body.username || ""), String(body.password || ""))) return privateJson({ message: "Administrator email, username, or password is incorrect." }, 401);
-  await sendAdminAccessEmail(await createConfirmationToken());
-  return privateJson({ message: "Confirmation link sent. Open it from the administrator mailbox to continue." });
-}
-async function confirm(request: Request) {
-  const token = new URL(request.url).searchParams.get("token") || "";
-  if (!await confirmationValid(token)) return Response.redirect(new URL("/admin?confirmation=invalid", request.url), 303);
-  return new Response(null, { status: 303, headers: { Location: new URL("/admin?confirmed=1", request.url).toString(), "Set-Cookie": createAdminCookie(), "Cache-Control": "no-store" } });
+  if (!await adminLoginConfigured()) return privateJson({ message: "Administrator credentials are not configured on the server." }, 503);
+  const body = await request.json() as { username?: string; password?: string };
+  if (!await adminCredentialsValid(String(body.username || ""), String(body.password || ""))) return privateJson({ message: "Username or password is incorrect. The account locks for 15 minutes after five failed attempts." }, 401);
+  return privateJson({ message: "Administrator session opened.", authenticated: true }, 200, { "Set-Cookie": createAdminCookie() });
 }
 async function overview(request: Request) {
   if (!adminSession(request)) return privateJson({ message: "Confirm an administrator sign-in first." }, 401);
@@ -69,6 +64,11 @@ async function users(request: Request) {
   if (databaseBackend() === "mysql") [rows] = await (await getMysqlPool()).query<(RowDataPacket & Record<string, unknown>)[]>(mysqlQuery);
   else rows = getSqliteJobDatabase().prepare(sqliteQuery).all() as Array<RowDataPacket & Record<string, unknown>>;
   return privateJson({ users: rows.map((row) => ({ id: String(row.id), name: String(row.name), email: String(row.email), verified: Boolean(row.email_verified_at), loggedIn: Boolean(row.logged_in), lastLoginAt: row.last_login_at || null, createdAt: row.created_at || null, lastActivityAt: row.private_updated_at || row.last_login_at || row.created_at || null, applications: Number(row.application_count || 0), resume: profileSummary(row.resume_profile), resumeFile: row.filename ? { filename: String(row.filename), size: Number(row.size_bytes || 0), uploadedAt: row.uploaded_at } : null })) });
+}
+async function botStatus(request: Request) {
+  if (!adminSession(request)) return privateJson({ message: "Administrator authentication is required." }, 401);
+  const [overview, runs] = await Promise.all([getJobSourceOverview(), listJobBotRuns(20)]);
+  return privateJson({ schedule: "17 * * * *", timezone: "UTC", nextRunAt: nextHourlyRun(), overview, runs });
 }
 async function cleanupJobs(request: Request) {
   if (!adminSession(request)) return privateJson({ message: "Confirm an administrator sign-in first." }, 401);
@@ -95,3 +95,4 @@ async function manualJob(request: Request) {
   return privateJson({ id, title, company }, 201);
 }
 function mysqlDate(value: string) { return new Date(value).toISOString().slice(0, 23).replace("T", " "); }
+function nextHourlyRun() { const next = new Date(); next.setUTCMinutes(17, 0, 0); if (next.getTime() <= Date.now()) next.setUTCHours(next.getUTCHours() + 1); return next.toISOString(); }

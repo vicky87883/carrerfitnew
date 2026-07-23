@@ -50,6 +50,12 @@ export function getSqliteJobDatabase() {
     );
     CREATE INDEX IF NOT EXISTS imported_jobs_active_idx ON imported_jobs(active, last_seen_at DESC);
     CREATE INDEX IF NOT EXISTS imported_jobs_search_idx ON imported_jobs(title, company, category);
+    CREATE TABLE IF NOT EXISTS job_bot_runs (
+      id TEXT PRIMARY KEY, trigger_type TEXT NOT NULL, status TEXT NOT NULL,
+      source_count INTEGER NOT NULL DEFAULT 0, refreshed_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0, started_at TEXT NOT NULL, finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS job_bot_runs_started_idx ON job_bot_runs(started_at DESC);
   `);
   return sqlite;
 }
@@ -203,6 +209,28 @@ export async function checkJobDatabaseConnection() {
   const startedAt = Date.now();
   getSqliteJobDatabase().prepare("SELECT 1").get();
   return { ok: true, backend: "sqlite" as const, latencyMs: Date.now() - startedAt };
+}
+
+export async function createJobBotRun(trigger: "cron" | "admin", sourceCount: number) {
+  const run = { id: randomUUID(), trigger, status: "Running" as const, sourceCount, refreshed: 0, failed: 0, startedAt: new Date().toISOString(), finishedAt: null as string | null };
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("INSERT INTO job_bot_runs (id,trigger_type,status,source_count,started_at) VALUES (?,?,?,?,?)", [run.id, run.trigger, run.status, run.sourceCount, mysqlDate(run.startedAt)]);
+  else getSqliteJobDatabase().prepare("INSERT INTO job_bot_runs (id,trigger_type,status,source_count,started_at) VALUES (?,?,?,?,?)").run(run.id, run.trigger, run.status, run.sourceCount, run.startedAt);
+  return run;
+}
+
+export async function finishJobBotRun(id: string, refreshed: number, failed: number) {
+  const finishedAt = new Date().toISOString(); const status = failed === 0 ? "Success" : refreshed > 0 ? "Partial" : "Failed";
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("UPDATE job_bot_runs SET status=?,refreshed_count=?,failed_count=?,finished_at=? WHERE id=?", [status, refreshed, failed, mysqlDate(finishedAt), id]);
+  else getSqliteJobDatabase().prepare("UPDATE job_bot_runs SET status=?,refreshed_count=?,failed_count=?,finished_at=? WHERE id=?").run(status, refreshed, failed, finishedAt, id);
+  return { id, status, refreshed, failed, finishedAt };
+}
+
+export async function listJobBotRuns(limit = 20) {
+  const count = Math.max(1, Math.min(100, limit)); const query = `SELECT id,trigger_type,status,source_count,refreshed_count,failed_count,started_at,finished_at FROM job_bot_runs ORDER BY started_at DESC LIMIT ${count}`;
+  let rows: Array<{ id: string; trigger_type: string; status: string; source_count: number; refreshed_count: number; failed_count: number; started_at: string; finished_at: string | null }>;
+  if (databaseBackend() === "mysql") [rows] = await (await getMysqlPool()).query<(RowDataPacket & typeof rows[number])[]>(query);
+  else rows = getSqliteJobDatabase().prepare(query).all() as typeof rows;
+  return rows.map((row) => ({ id: row.id, trigger: row.trigger_type, status: row.status, sourceCount: Number(row.source_count), refreshed: Number(row.refreshed_count), failed: Number(row.failed_count), startedAt: iso(row.started_at), finishedAt: row.finished_at ? iso(row.finished_at) : null }));
 }
 
 function mapSource(row: SourceRow): JobSource {

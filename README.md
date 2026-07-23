@@ -145,13 +145,14 @@ Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** 
 | Method | Route | Purpose | Access |
 | --- | --- | --- | --- |
 | `GET` | `/api/admin/status` | Reports whether administrator access is configured and whether this browser is authenticated | Public; returns no credentials |
-| `POST` | `/api/admin/request-access` | Validates the separate administrator credentials and emails a one-time confirmation link | Admin credentials; rate limited |
-| `GET` | `/api/admin/confirm?token=...` | Consumes the one-time confirmation token, sets the admin cookie, and redirects to `/admin` | Valid one-time token |
+| `POST` | `/api/admin/request-access` | Validates the database-backed administrator username/password and opens an HTTP-only session | Admin credentials; rate limited and lockout protected |
 | `GET` | `/api/admin/overview` | Returns user, active-job, source, and published-post totals | Admin session |
+| `GET` | `/api/admin/bot` | Returns schedule, source health, job totals, failures, and recent bot-run history | Admin session |
 | `GET` | `/api/admin/users` | Lists registered users, verification/login state, activity, applications, and resume summaries | Admin session |
 | `GET` | `/api/admin/resume/[userId]` | Decrypts and previews a user's stored resume file | Admin session; private/no-store response |
 | `POST` | `/api/admin/manual-job` | Creates and publishes a normalized manual job record | Admin session |
 | `POST` | `/api/admin/cleanup-jobs` | Deletes imported jobs not seen for more than 30 days | Admin session |
+| `POST` | `/api/admin/run-bot` | Runs the bounded ingestion worker immediately and records its result | Admin session |
 | `POST` | `/api/admin/logout` | Clears the separate administrator session cookie | Admin session |
 
 ### Job-source ingestion API
@@ -208,7 +209,7 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 | `SCRAPER_ADMIN_TOKEN`, `CRON_SECRET` | Job-source administration and scheduled refreshes |
 | `BLOG_ADMIN_TOKEN` | Blog administration |
 
-`/admin` is separate from user accounts. Enter the configured administrator email, username, and password; the server sends a confirmation link to `ADMIN_EMAIL`, which opens the private sidebar control centre in that browser. All user, resume, job, and blog management APIs validate the signed administrator cookie.
+`/admin` is separate from user accounts. Enter the configured administrator username and password to open an eight-hour HTTP-only session. On the first successful login, the environment credentials bootstrap an `administrator_accounts` database record containing only a salted scrypt password hash; plaintext passwords are never stored or returned. Five failed attempts lock the account for 15 minutes. All user, resume, job-bot, and blog management APIs validate the signed administrator cookie.
 
 ## Safe authentication rollout
 

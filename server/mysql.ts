@@ -138,6 +138,28 @@ async function ensureMysqlSchema(target: Pool) {
         created_at DATETIME(3) NOT NULL,
         KEY admin_access_tokens_expiry_idx (expires_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS administrator_accounts (
+        id VARCHAR(36) PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        failed_login_count INT UNSIGNED NOT NULL DEFAULT 0,
+        locked_until DATETIME(3) NULL,
+        last_login_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL,
+        updated_at DATETIME(3) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS job_bot_runs (
+        id VARCHAR(36) PRIMARY KEY,
+        trigger_type VARCHAR(24) NOT NULL,
+        status VARCHAR(24) NOT NULL,
+        source_count INT UNSIGNED NOT NULL DEFAULT 0,
+        refreshed_count INT UNSIGNED NOT NULL DEFAULT 0,
+        failed_count INT UNSIGNED NOT NULL DEFAULT 0,
+        started_at DATETIME(3) NOT NULL,
+        finished_at DATETIME(3) NULL,
+        KEY job_bot_runs_started_idx (started_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS auth_tokens (
         token_hash CHAR(64) PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
