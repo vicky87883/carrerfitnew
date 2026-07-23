@@ -200,7 +200,12 @@ export async function getJobSourceOverview(): Promise<JobSourceOverview> {
   }
   return {
     sources,
-    stats: { sources: sources.length, activeJobs: Number(stats.activeJobs) || 0, last24Hours: Number(stats.last24Hours) || 0, failedSources: sources.filter((source) => source.lastStatus === "Failed").length },
+    stats: {
+      sources: sources.filter((source) => source.enabled).length,
+      activeJobs: Number(stats.activeJobs) || 0,
+      last24Hours: Number(stats.last24Hours) || 0,
+      failedSources: sources.filter((source) => source.enabled && source.lastStatus === "Failed").length,
+    },
     recentJobs: await listImportedJobs({ limit: 8 }),
   };
 }
