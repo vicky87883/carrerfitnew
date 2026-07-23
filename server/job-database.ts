@@ -57,6 +57,7 @@ export function getSqliteJobDatabase() {
     );
     CREATE INDEX IF NOT EXISTS job_bot_runs_started_idx ON job_bot_runs(started_at DESC);
   `);
+  sqlite.prepare("UPDATE job_sources SET enabled=0,last_status='Success',last_error=NULL WHERE id='manual-admin-source'").run();
   return sqlite;
 }
 
