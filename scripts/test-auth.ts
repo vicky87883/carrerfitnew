@@ -8,7 +8,7 @@ process.env.CARRERFIT_DB_PATH = database;
 delete process.env.DATABASE_URL; delete process.env.DB_HOST; delete process.env.DB_NAME; delete process.env.DB_USER; delete process.env.DB_PASSWORD;
 process.env.AUTH_SECRET = "test-only-resume-vault-secret-that-is-long-enough";
 delete process.env.ADMIN_EMAIL;
-process.env.ADMIN_EMAILS = "admin@example.com";
+delete process.env.ADMIN_EMAILS;
 process.env.ADMIN_USERNAME = "test-admin";
 process.env.ADMIN_PASSWORD = "SecureAdmin15!";
 

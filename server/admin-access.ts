@@ -8,7 +8,7 @@ export const ADMIN_COOKIE = "carrerfit_admin";
 const accessSeconds = 8 * 60 * 60;
 const confirmSeconds = 15 * 60;
 
-export function adminConfigured() { return Boolean(adminEmail() && process.env.ADMIN_USERNAME && (process.env.ADMIN_PASSWORD || "").length >= 12 && (process.env.AUTH_SECRET || "").length >= 32); }
+export function adminConfigured() { return Boolean(process.env.ADMIN_USERNAME?.trim() && (process.env.ADMIN_PASSWORD || "").length >= 12 && (process.env.AUTH_SECRET || "").length >= 32); }
 export function adminEmail() { return (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAILS?.split(",")[0] || "").trim().toLowerCase(); }
 export async function adminLoginConfigured() {
   if ((process.env.AUTH_SECRET || "").length < 32) return false;
@@ -20,7 +20,7 @@ export async function adminLoginConfigured() {
 }
 export async function adminCredentialsValid(username: string, password: string) {
   const normalized = username.trim().slice(0, 100); ensureSqliteAdmin();
-  if (adminConfigured() && safeEquals(normalized, process.env.ADMIN_USERNAME || "") && safeEquals(password, process.env.ADMIN_PASSWORD || "")) {
+  if (adminConfigured() && safeEquals(normalized, process.env.ADMIN_USERNAME?.trim() || "") && safeEquals(password, process.env.ADMIN_PASSWORD || "")) {
     await bootstrapAdmin(normalized, password);
     return true;
   }
