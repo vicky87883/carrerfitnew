@@ -112,9 +112,25 @@ export type RankedJob = Job & {
   matchReason: string;
 };
 
+export type AtsAnalysis = {
+  score: number;
+  label: "Needs work" | "Developing" | "ATS ready" | "Strong";
+  disclaimer: string;
+  categories: {
+    name: "Contact" | "Structure" | "Content" | "Keywords" | "Readability";
+    score: number;
+    weight: number;
+    checks: { label: string; passed: boolean; detail: string }[];
+  }[];
+  strengths: string[];
+  priorityFixes: string[];
+  metrics: { words: number; sections: number; skills: number; quantifiedAchievements: number; actionVerbBullets: number };
+};
+
 export type ResumeMatchResult = {
   profile: ResumeProfile;
   document?: ResumeDocument;
+  ats: AtsAnalysis;
   jobs: RankedJob[];
   aiPowered: boolean;
   file: { name: string; type: string; size: number; charactersRead: number };
@@ -207,6 +223,7 @@ export type DashboardData = {
   profile: { name: string; email: string; completion: number };
   resumeProfile?: ResumeProfile | null;
   resumeDocument?: ResumeDocument | null;
+  resumeAts?: AtsAnalysis | null;
   resumeJobs?: RankedJob[];
   matches: CareerMatch[];
   applications: (Application & { job: Job })[];

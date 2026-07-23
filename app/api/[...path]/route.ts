@@ -8,6 +8,7 @@ import {
   saveAssessmentMatches, saveResumeAnalysis, updateUserApplication,
 } from "@/server/auth-store";
 import { jobs } from "@/server/data/jobs";
+import { analyzeAts } from "@/server/ats";
 import { analyzeResumeWithGroq, hydrateRankedJobs } from "@/server/groq";
 import {
   createJobSource, deleteJobSource, findJobSourceByUrl, getImportedJob, getJobSource, getJobSourceOverview,
@@ -125,8 +126,9 @@ async function analyzeResume(request: Request) {
   const text = await extractResumeText(file); const imported = await importedJobsOrEmpty({ limit: 80 });
   const availableJobs = dedupeJobs([...jobs, ...imported.jobs]);
   const analysis = await analyzeResumeWithGroq(text, availableJobs); const rankedJobs = hydrateRankedJobs(availableJobs, analysis);
-  if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file), saveResumeDocument(auth.user.id, text, analysis.document)]);
-  return privateJson({ profile: analysis.profile, document: analysis.document, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
+  const ats = analyzeAts(text, analysis.document);
+  if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file), saveResumeDocument(auth.user.id, text, analysis.document, ats)]);
+  return privateJson({ profile: analysis.profile, document: analysis.document, ats, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
 }
 
 async function addSource(request: Request) {
@@ -160,8 +162,9 @@ async function scrapeOne(id: string) {
 async function cronScrape(request: Request) {
   if (!secureMatch(request.headers.get("x-cron-secret") || "", process.env.CRON_SECRET || "")) return Response.json({ message: "Invalid cron credential." }, { status: 401 });
   const enabled = (await listJobSources()).filter((source) => source.enabled);
-  const results = await Promise.allSettled(enabled.map((source) => runSourceScrape(source.id)));
-  return Response.json({ refreshed: fulfilled(results), failed: rejected(results) });
+  const startedAt = new Date().toISOString();
+  const results = await runWithConcurrency(enabled.map((source) => source.id), 3, runSourceScrape);
+  return Response.json({ ok: rejected(results) === 0, startedAt, finishedAt: new Date().toISOString(), sources: enabled.length, refreshed: fulfilled(results), failed: rejected(results) });
 }
 
 async function createAssessment(request: Request) {
@@ -200,7 +203,7 @@ async function dashboard(request: Request) {
     const [privateData, saved, resumeDocument] = await Promise.all([getPrivateData(auth.user.id), listUserApplications(auth.user.id), getResumeDocument(auth.user.id)]);
     const applications = (await Promise.all(saved.map(async (application) => { const job = await findJob(application.jobId); return job ? { ...application, job } : null; }))).filter((item): item is NonNullable<typeof item> => Boolean(item));
     const completion = privateData.resumeProfile ? 90 : privateData.assessmentMatches.length ? 68 : 35;
-    return privateJson({ profile: { name: auth.user.name, email: auth.user.email, completion }, resumeProfile: privateData.resumeProfile, resumeDocument: resumeDocument?.document || null, resumeJobs: privateData.resumeJobs.slice(0, 5), matches: privateData.assessmentMatches, applications, stats: { saved: applications.filter((x) => x.status === "Saved").length, applied: applications.filter((x) => x.status !== "Saved").length, interviews: applications.filter((x) => x.status === "Interview").length, readiness: privateData.resumeProfile ? 86 : privateData.assessmentMatches.length ? 70 : 45 } });
+    return privateJson({ profile: { name: auth.user.name, email: auth.user.email, completion }, resumeProfile: privateData.resumeProfile, resumeDocument: resumeDocument?.document || null, resumeAts: resumeDocument?.ats || null, resumeJobs: privateData.resumeJobs.slice(0, 5), matches: privateData.assessmentMatches, applications, stats: { saved: applications.filter((x) => x.status === "Saved").length, applied: applications.filter((x) => x.status !== "Saved").length, interviews: applications.filter((x) => x.status === "Interview").length, readiness: resumeDocument?.ats?.score || (privateData.resumeProfile ? 86 : privateData.assessmentMatches.length ? 70 : 45) } });
   }
   let store: Awaited<ReturnType<typeof readStore>>; let databaseDegraded = false;
   try { store = await readStore(); }
@@ -237,5 +240,16 @@ function requireAdmin(request: Request) {
 function secureMatch(value: string, expected: string) { if (!value || !expected) return false; const left = Buffer.from(value); const right = Buffer.from(expected); return left.length === right.length && timingSafeEqual(left, right); }
 function fulfilled(results: PromiseSettledResult<unknown>[]) { return results.filter((result) => result.status === "fulfilled").length; }
 function rejected(results: PromiseSettledResult<unknown>[]) { return results.filter((result) => result.status === "rejected").length; }
+async function runWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
+  const results: PromiseSettledResult<R>[] = new Array(items.length); let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      try { results[index] = { status: "fulfilled", value: await worker(items[index]) }; }
+      catch (reason) { results[index] = { status: "rejected", reason }; }
+    }
+  }));
+  return results;
+}
 function notFound() { return Response.json({ message: "API route not found" }, { status: 404 }); }
 function routeFailure(error: unknown) { if (error instanceof ScrapeError) return Response.json({ message: error.message }, { status: error.status }); return apiFailure(error); }

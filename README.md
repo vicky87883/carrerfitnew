@@ -13,6 +13,7 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Verified-email accounts with Argon2id passwords, one-time recovery links, and server-side sessions
 - Per-user resume profiles, assessment matches, and saved-job pipelines
 - PDF and DOCX resume parsing (8 MB limit) with encrypted original and extracted-text retention for signed-in users
+- Evidence-based ATS compatibility report covering contact data, standard sections, achievement quality, keyword evidence, extraction readability, and prioritized fixes
 - Groq-powered, schema-validated resume JSON covering identity, skills with evidence, experience, education, projects, certifications, languages, and keywords
 - Resume-aware AI mock interviews with adaptive Groq follow-up questions
 - Spoken interviewer prompts, browser speech-to-text answers, and typed fallback
@@ -23,7 +24,7 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - Express REST API with rate limiting, secure headers, upload validation, and configurable persistence
 - Persistent SQLite job database with duplicate-safe imports and source health tracking
 - Secure job ingestion for public Lever, Greenhouse, Ashby, and JobPosting structured-data pages
-- Protected source-management dashboard with manual refresh and cron-compatible synchronization
+- Protected source-management dashboard with manual refresh and hourly GitHub Actions synchronization
 - Database-backed career guides with drafts, publishing controls, structured data, sitemap, and RSS
 - Private blog publishing workspace at `/blog-admin`
 
@@ -130,7 +131,7 @@ Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** 
 | --- | --- | --- | --- |
 | `GET` | `/api/jobs?q=&category=&mode=` | Lists curated and imported active jobs with optional filters | Public |
 | `GET` | `/api/jobs/[id]` | Returns one curated or imported job | Public |
-| `POST` | `/api/resume/analyze` | Parses a PDF/DOCX, runs validated Groq extraction, stores encrypted resume intelligence, and returns ranked jobs | Verified session; multipart form; rate limited |
+| `POST` | `/api/resume/analyze` | Parses a PDF/DOCX, runs validated Groq extraction, calculates an ATS compatibility report, stores encrypted resume intelligence, and returns ranked jobs | Verified session; multipart form; rate limited |
 | `POST` | `/api/assessment` | Generates and stores career matches from assessment answers | Verified session |
 | `GET` | `/api/dashboard` | Returns the current user's private profile, resume document, matches, applications, and statistics | Verified session |
 | `POST` | `/api/applications` | Saves a job to the user's pipeline | Verified session |
@@ -166,6 +167,19 @@ These routes accept either the confirmed admin cookie or `x-admin-token: <SCRAPE
 | `PATCH` | `/api/job-sources/[id]` | Enables or disables one source | Admin session or scraper token |
 | `DELETE` | `/api/job-sources/[id]` | Deletes one source and its imported jobs | Admin session or scraper token |
 | `POST` | `/api/cron/job-sources` | Scheduled refresh endpoint | `x-cron-secret: <CRON_SECRET>` |
+
+### Always-on job ingestion
+
+The repository includes `.github/workflows/job-bot.yml`. GitHub Actions invokes the protected cron endpoint hourly, and the server refreshes enabled public sources with a maximum of three concurrent scrapes. Source adapters respect HTTPS/SSRF controls, robots directives, response limits, and supported public job-board formats; the bot does not bypass logins, CAPTCHAs, or publisher access controls.
+
+To activate it:
+
+1. Set a strong `CRON_SECRET` in the Hostinger production environment and redeploy.
+2. In GitHub, open **Settings → Secrets and variables → Actions** and create a repository secret named `CRON_SECRET` with the exact same value.
+3. Open **Actions → CarrerFit job ingestion bot → Run workflow** once to verify it. Scheduled workflows are best-effort and can start a few minutes late.
+4. Add and enable sources in `/admin`. Only enabled sources are synchronized and normalized into the jobs database.
+
+The response reports source count, successful refreshes, failures, and start/finish timestamps. Never commit the secret or expose it in client code.
 
 ### Blog API
 
@@ -209,7 +223,7 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 - Put the service behind HTTPS and a reverse proxy with request-body limits.
 - SQLite and the local JSON store remain the development fallback. Production uses MySQL/MariaDB for jobs and account-isolated private data.
 - MySQL schema bootstrap is non-destructive and uses `CREATE TABLE IF NOT EXISTS`. Run `npm run migrate:mysql` once to copy existing SQLite jobs and local state after configuring MySQL.
-- With accounts enabled, uploaded PDF/DOCX files are AES-256-GCM encrypted in `user_resume_files`. The complete extracted text and normalized resume JSON are independently encrypted in `user_resume_documents`; only authenticated private routes decrypt the structured view. Groq fields are schema-validated and carry evidence/confidence, but automated extraction must still be reviewed for important decisions.
+- With accounts enabled, uploaded PDF/DOCX files are AES-256-GCM encrypted in `user_resume_files`. The complete extracted text, normalized resume JSON, and ATS report are independently encrypted in `user_resume_documents`; only authenticated private routes decrypt the structured view. Groq fields are schema-validated and carry evidence/confidence, but automated extraction must still be reviewed for important decisions. The ATS score is a compatibility estimate, not a guarantee that every employer system will parse or rank a resume identically.
 - Session tokens are random, stored only as SHA-256 hashes, and delivered in `HttpOnly`, `SameSite=Lax`, production `Secure` cookies. Passwords use Argon2id.
 - Email verification and password-reset tokens are random, hashed in storage, expire, and can be used only once.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.

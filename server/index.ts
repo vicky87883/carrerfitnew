@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import multer from "multer";
 import type { AssessmentAnswers, CareerMatch } from "../lib/types.js";
+import { analyzeAts } from "./ats.js";
 import { jobs } from "./data/jobs.js";
 import { analyzeResumeWithGroq, hydrateRankedJobs } from "./groq.js";
 import { createInterviewPlan, evaluateInterviewAnswer, interviewResponseSchema, parseInterviewProfile } from "./interview.js";
@@ -41,6 +42,8 @@ app.post("/api/resume/analyze", resumeLimiter, resumeUpload.single("resume"), as
   const analysis = await analyzeResumeWithGroq(text, availableJobs);
   res.status(201).json({
     profile: analysis.profile,
+    document: analysis.document,
+    ats: analyzeAts(text, analysis.document),
     jobs: hydrateRankedJobs(availableJobs, analysis),
     aiPowered: analysis.aiPowered,
     file: { name: req.file.originalname, type: req.file.mimetype, size: req.file.size, charactersRead: text.length },

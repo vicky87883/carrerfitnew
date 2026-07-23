@@ -1,0 +1,25 @@
+name: CarrerFit job ingestion bot
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: carrerfit-job-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Refresh enabled public job sources
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET"
+          curl --fail-with-body --retry 2 --retry-all-errors --max-time 780 \
+            -X POST "https://carrerfit.com/api/cron/job-sources" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H "user-agent: CarrerFit-JobBot/1.0"

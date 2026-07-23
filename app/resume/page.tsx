@@ -204,6 +204,25 @@ export default function ResumePage() {
             <RefreshCw /> Analyze another resume
           </button>
         </section>
+        <section className="atsReport">
+          <div className="atsScore">
+            <span>ATS compatibility</span>
+            <strong>{result.ats.score}<i>/100</i></strong>
+            <b>{result.ats.label}</b>
+            <small>{result.ats.disclaimer}</small>
+          </div>
+          <div className="atsBreakdown">
+            <h2>Resume scan</h2>
+            {result.ats.categories.map((category) => <div className="atsCategory" key={category.name}>
+              <span>{category.name}<b>{category.score}%</b></span>
+              <progress max="100" value={category.score}/>
+            </div>)}
+          </div>
+          <div className="atsFixes">
+            <h2>Priority improvements</h2>
+            {result.ats.priorityFixes.length ? <ul>{result.ats.priorityFixes.slice(0, 4).map((fix) => <li key={fix}><CircleCheck/>{fix}</li>)}</ul> : <p>No high-priority parsing issues detected. Tailor keywords to each job description before applying.</p>}
+          </div>
+        </section>
         <section className="resumeResultGrid">
           <aside className="profileBrief">
             <span className="profileInitial">

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
-import type { ResumeDocument } from "../lib/types.js";
+import type { AtsAnalysis, ResumeDocument } from "../lib/types.js";
 import { databaseBackend, getMysqlPool } from "./mysql.js";
 import { getSqliteJobDatabase } from "./job-database.js";
 
@@ -29,8 +29,8 @@ export async function getResumeFile(userId: string) {
   return { filename: row.filename, mimeType: row.mime_type, size: Number(row.size_bytes), uploadedAt: iso(row.uploaded_at), data };
 }
 
-export async function saveResumeDocument(userId: string, extractedText: string, document: ResumeDocument) {
-  const documentPayload = encrypt(Buffer.from(JSON.stringify(document), "utf8"));
+export async function saveResumeDocument(userId: string, extractedText: string, document: ResumeDocument, ats?: AtsAnalysis) {
+  const documentPayload = encrypt(Buffer.from(JSON.stringify({ document, ats: ats || null }), "utf8"));
   const textPayload = encrypt(Buffer.from(extractedText, "utf8")); const now = new Date().toISOString();
   if (databaseBackend() === "mysql") await (await getMysqlPool()).execute(`INSERT INTO user_resume_documents
     (user_id,encrypted_document,document_iv,document_auth_tag,encrypted_text,text_iv,text_auth_tag,word_count,character_count,analyzed_at) VALUES (?,?,?,?,?,?,?,?,?,?)
@@ -47,8 +47,9 @@ export async function getResumeDocument(userId: string) {
   if (databaseBackend() === "mysql") { const [rows] = await (await getMysqlPool()).execute<DocumentRow[]>(query, [userId]); row = rows[0]; }
   else { const db = getSqliteJobDatabase(); ensureSqlite(db); row = db.prepare(query).get(userId) as DocumentRow | undefined; }
   if (!row) return null;
-  const document = JSON.parse(decrypt(row.encrypted_document, row.document_iv, row.document_auth_tag).toString("utf8")) as ResumeDocument;
-  return { document, wordCount: Number(row.word_count), characterCount: Number(row.character_count), analyzedAt: iso(row.analyzed_at) };
+  const parsed = JSON.parse(decrypt(row.encrypted_document, row.document_iv, row.document_auth_tag).toString("utf8")) as ResumeDocument | { document: ResumeDocument; ats?: AtsAnalysis | null };
+  const document = "document" in parsed ? parsed.document : parsed;
+  return { document, ats: "document" in parsed ? parsed.ats || null : null, wordCount: Number(row.word_count), characterCount: Number(row.character_count), analyzedAt: iso(row.analyzed_at) };
 }
 
 function vaultKey() { const secret = process.env.AUTH_SECRET || ""; if (secret.length < 32) throw new Error("AUTH_SECRET must be configured for encrypted resume storage."); return createHash("sha256").update(`carrerfit-resume-vault:${secret}`).digest(); }
