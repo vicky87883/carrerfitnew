@@ -8,8 +8,8 @@ export const ADMIN_COOKIE = "carrerfit_admin";
 const accessSeconds = 8 * 60 * 60;
 const confirmSeconds = 15 * 60;
 
-export function adminConfigured() { return Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_USERNAME && (process.env.ADMIN_PASSWORD || "").length >= 16 && (process.env.AUTH_SECRET || "").length >= 32); }
-export function adminEmail() { return (process.env.ADMIN_EMAIL || "").trim().toLowerCase(); }
+export function adminConfigured() { return Boolean(adminEmail() && process.env.ADMIN_USERNAME && (process.env.ADMIN_PASSWORD || "").length >= 16 && (process.env.AUTH_SECRET || "").length >= 32); }
+export function adminEmail() { return (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAILS?.split(",")[0] || "").trim().toLowerCase(); }
 export async function adminLoginConfigured() {
   if ((process.env.AUTH_SECRET || "").length < 32) return false;
   if (adminConfigured()) return true;
@@ -20,12 +20,13 @@ export async function adminLoginConfigured() {
 }
 export async function adminCredentialsValid(username: string, password: string) {
   const normalized = username.trim().slice(0, 100); ensureSqliteAdmin();
+  if (adminConfigured() && safeEquals(normalized, process.env.ADMIN_USERNAME || "") && safeEquals(password, process.env.ADMIN_PASSWORD || "")) {
+    await bootstrapAdmin(normalized, password);
+    return true;
+  }
   let account: { id: string; username: string; password_hash: string; failed_login_count: number; locked_until: string | null } | undefined;
   if (databaseBackend() === "mysql") { const [rows] = await (await getMysqlPool()).execute<(RowDataPacket & typeof account)[]>("SELECT id,username,password_hash,failed_login_count,locked_until FROM administrator_accounts WHERE username=? AND active=1 LIMIT 1", [normalized]); account = rows[0]; }
   else account = getSqliteJobDatabase().prepare("SELECT id,username,password_hash,failed_login_count,locked_until FROM administrator_accounts WHERE username=? AND active=1 LIMIT 1").get(normalized) as typeof account;
-  if (!account && adminConfigured() && safeEquals(normalized, process.env.ADMIN_USERNAME || "") && safeEquals(password, process.env.ADMIN_PASSWORD || "")) {
-    await bootstrapAdmin(normalized, password); return true;
-  }
   const locked = Boolean(account?.locked_until && new Date(iso(account.locked_until)).getTime() > Date.now());
   const valid = await passwordMatches(account?.password_hash || null, password);
   if (!account || !valid || locked) { if (account && !locked) await recordAdminFailure(account.id, Number(account.failed_login_count) + 1); return false; }
@@ -60,8 +61,17 @@ function ensureSqliteAdmin() { if (databaseBackend() === "sqlite") getSqliteJobD
 )`); }
 async function bootstrapAdmin(username: string, password: string) {
   const id = randomUUID(); const now = new Date().toISOString(); const hash = await hashPassword(password);
-  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("INSERT IGNORE INTO administrator_accounts (id,username,password_hash,active,created_at,updated_at) VALUES (?,?,?,1,?,?)", [id, username, hash, mysqlDate(new Date(now)), mysqlDate(new Date(now))]);
-  else getSqliteJobDatabase().prepare("INSERT OR IGNORE INTO administrator_accounts (id,username,password_hash,active,created_at,updated_at) VALUES (?,?,?,1,?,?)").run(id, username, hash, now, now);
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute(
+    `INSERT INTO administrator_accounts (id,username,password_hash,active,failed_login_count,locked_until,last_login_at,created_at,updated_at)
+     VALUES (?,?,?,1,0,NULL,?,?,?)
+     ON DUPLICATE KEY UPDATE password_hash=VALUES(password_hash),active=1,failed_login_count=0,locked_until=NULL,last_login_at=VALUES(last_login_at),updated_at=VALUES(updated_at)`,
+    [id, username, hash, mysqlDate(new Date(now)), mysqlDate(new Date(now)), mysqlDate(new Date(now))],
+  );
+  else getSqliteJobDatabase().prepare(
+    `INSERT INTO administrator_accounts (id,username,password_hash,active,failed_login_count,locked_until,last_login_at,created_at,updated_at)
+     VALUES (?,?,?,1,0,NULL,?,?,?)
+     ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash,active=1,failed_login_count=0,locked_until=NULL,last_login_at=excluded.last_login_at,updated_at=excluded.updated_at`,
+  ).run(id, username, hash, now, now, now);
 }
 async function recordAdminFailure(id: string, failures: number) {
   const lockedUntil = failures >= 5 ? new Date(Date.now() + 15 * 60_000).toISOString() : null;

@@ -7,7 +7,8 @@ const database = join(process.cwd(), "server", "data", `auth-test-${process.pid}
 process.env.CARRERFIT_DB_PATH = database;
 delete process.env.DATABASE_URL; delete process.env.DB_HOST; delete process.env.DB_NAME; delete process.env.DB_USER; delete process.env.DB_PASSWORD;
 process.env.AUTH_SECRET = "test-only-resume-vault-secret-that-is-long-enough";
-process.env.ADMIN_EMAIL = "admin@example.com";
+delete process.env.ADMIN_EMAIL;
+process.env.ADMIN_EMAILS = "admin@example.com";
 process.env.ADMIN_USERNAME = "test-admin";
 process.env.ADMIN_PASSWORD = "SecureAdminPassword2026";
 
@@ -29,6 +30,9 @@ async function main() {
   assert.equal(await adminCredentialsValid("test-admin", "SecureAdminPassword2026"), true, "environment credentials bootstrap a hashed database administrator");
   assert.equal(await adminCredentialsValid("test-admin", "wrong-password"), false);
   assert.equal(await adminCredentialsValid("test-admin", "SecureAdminPassword2026"), true, "database-backed administrator login remains valid");
+  process.env.ADMIN_PASSWORD = "RotatedSecureAdminPassword2026";
+  assert.equal(await adminCredentialsValid("test-admin", "RotatedSecureAdminPassword2026"), true, "environment credential rotation updates the hashed database administrator");
+  assert.equal(await adminCredentialsValid("test-admin", "SecureAdminPassword2026"), false, "the previous password stops working after rotation");
   assert.match(createAdminCookie(), /HttpOnly/);
   const alice = await createUser("alice@example.com", "Alice Candidate", passwordHash);
   const bob = await createUser("bob@example.com", "Bob Candidate", passwordHash);
