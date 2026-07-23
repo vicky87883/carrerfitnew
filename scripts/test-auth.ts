@@ -10,7 +10,7 @@ process.env.AUTH_SECRET = "test-only-resume-vault-secret-that-is-long-enough";
 delete process.env.ADMIN_EMAIL;
 process.env.ADMIN_EMAILS = "admin@example.com";
 process.env.ADMIN_USERNAME = "test-admin";
-process.env.ADMIN_PASSWORD = "SecureAdminPassword2026";
+process.env.ADMIN_PASSWORD = "SecureAdmin15!";
 
 async function main() {
   const { createOneTimeToken, hashPassword, passwordMatches } = await import("../server/auth.js");
@@ -27,12 +27,12 @@ async function main() {
   assert.equal(await passwordMatches(passwordHash, "SecurePassword2026"), true);
   assert.equal(await passwordMatches(passwordHash, "wrong-password"), false);
   assert.equal(await adminLoginConfigured(), true);
-  assert.equal(await adminCredentialsValid("test-admin", "SecureAdminPassword2026"), true, "environment credentials bootstrap a hashed database administrator");
+  assert.equal(await adminCredentialsValid("test-admin", "SecureAdmin15!"), true, "environment credentials bootstrap a hashed database administrator");
   assert.equal(await adminCredentialsValid("test-admin", "wrong-password"), false);
-  assert.equal(await adminCredentialsValid("test-admin", "SecureAdminPassword2026"), true, "database-backed administrator login remains valid");
+  assert.equal(await adminCredentialsValid("test-admin", "SecureAdmin15!"), true, "database-backed administrator login remains valid");
   process.env.ADMIN_PASSWORD = "RotatedSecureAdminPassword2026";
   assert.equal(await adminCredentialsValid("test-admin", "RotatedSecureAdminPassword2026"), true, "environment credential rotation updates the hashed database administrator");
-  assert.equal(await adminCredentialsValid("test-admin", "SecureAdminPassword2026"), false, "the previous password stops working after rotation");
+  assert.equal(await adminCredentialsValid("test-admin", "SecureAdmin15!"), false, "the previous password stops working after rotation");
   assert.match(createAdminCookie(), /HttpOnly/);
   const alice = await createUser("alice@example.com", "Alice Candidate", passwordHash);
   const bob = await createUser("bob@example.com", "Bob Candidate", passwordHash);

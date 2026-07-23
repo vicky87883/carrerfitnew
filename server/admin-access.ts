@@ -8,7 +8,7 @@ export const ADMIN_COOKIE = "carrerfit_admin";
 const accessSeconds = 8 * 60 * 60;
 const confirmSeconds = 15 * 60;
 
-export function adminConfigured() { return Boolean(adminEmail() && process.env.ADMIN_USERNAME && (process.env.ADMIN_PASSWORD || "").length >= 16 && (process.env.AUTH_SECRET || "").length >= 32); }
+export function adminConfigured() { return Boolean(adminEmail() && process.env.ADMIN_USERNAME && (process.env.ADMIN_PASSWORD || "").length >= 12 && (process.env.AUTH_SECRET || "").length >= 32); }
 export function adminEmail() { return (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAILS?.split(",")[0] || "").trim().toLowerCase(); }
 export async function adminLoginConfigured() {
   if ((process.env.AUTH_SECRET || "").length < 32) return false;

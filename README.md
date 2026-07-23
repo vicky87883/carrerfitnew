@@ -65,7 +65,7 @@ Environment variables:
 - `BLOG_ADMIN_TOKEN`: separate secret of at least 24 characters used to unlock `/blog-admin`
 - `APP_URL`: public origin used for secure confirmation/reset links, for example `https://carrerfit.com`
 - `AUTH_SECRET`: random secret of at least 32 characters used to protect request fingerprints
-- `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`: separate administrator email, username, and password (password minimum 16 characters)
+- `ADMIN_EMAIL` (or the first address in `ADMIN_EMAILS`), `ADMIN_USERNAME`, `ADMIN_PASSWORD`: separate administrator email, username, and password (password minimum 12 characters)
 - `AUTH_REQUIRED`: set to `true` only after the SMTP settings below are working
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`: SMTP connection (`smtp.hostinger.com`, `465`, `true` for Hostinger)
 - `SMTP_USER`, `SMTP_PASSWORD`: credentials for a real mailbox such as `no-reply@carrerfit.com`
