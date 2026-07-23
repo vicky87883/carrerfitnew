@@ -15,6 +15,9 @@ A full-stack career discovery application built with Next.js 15, React 19, TypeS
 - PDF and DOCX resume parsing (8 MB limit) with encrypted original and extracted-text retention for signed-in users
 - Evidence-based ATS compatibility report covering contact data, standard sections, achievement quality, keyword evidence, extraction readability, and prioritized fixes
 - Groq-powered, schema-validated resume JSON covering identity, skills with evidence, experience, education, projects, certifications, languages, and keywords
+- Audited resume-processing runs with AI/fallback status, ATS score, extraction confidence, and processing duration
+- Same-user resume continuity that can normalize a replacement upload against the account's prior structured profile without cross-user learning
+- Privacy-conscious first-party page-view and active-time analytics in the private administrator console
 - Resume-aware AI mock interviews with adaptive Groq follow-up questions
 - Spoken interviewer prompts, browser speech-to-text answers, and typed fallback
 - Optional on-device camera coaching for framing, lighting, and movement stability
@@ -94,7 +97,7 @@ Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** 
 | `/resume` | PDF/DOCX upload and AI resume matching | Verified session |
 | `/assessment` | Career assessment | Verified session |
 | `/interview` | Resume-aware AI interview practice | Verified session |
-| `/admin` | Private application-management console | Admin credentials, email confirmation, then admin session |
+| `/admin` | Private application-management console | Admin credentials and admin session |
 | `/job-sources` | Legacy job-source workspace; redirects to `/admin` in production | Admin console |
 | `/blog-admin` | Legacy publishing workspace; redirects to `/admin` in production | Admin console |
 | `/privacy` | Resume, account, AI, camera, retention, and safety disclosures | Public |
@@ -132,6 +135,7 @@ Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** 
 | `GET` | `/api/jobs?q=&category=&mode=` | Lists curated and imported active jobs with optional filters | Public |
 | `GET` | `/api/jobs/[id]` | Returns one curated or imported job | Public |
 | `POST` | `/api/resume/analyze` | Parses a PDF/DOCX, runs validated Groq extraction, calculates an ATS compatibility report, stores encrypted resume intelligence, and returns ranked jobs | Verified session; multipart form; rate limited |
+| `POST` | `/api/analytics/event` | Stores a first-party page view or bounded active-time signal without query strings or form contents | Same-origin browser; user session optional |
 | `POST` | `/api/assessment` | Generates and stores career matches from assessment answers | Verified session |
 | `GET` | `/api/dashboard` | Returns the current user's private profile, resume document, matches, applications, and statistics | Verified session |
 | `POST` | `/api/applications` | Saves a job to the user's pipeline | Verified session |
@@ -148,8 +152,10 @@ Production sets `AUTH_REQUIRED=true`. In the tables below, **verified session** 
 | `POST` | `/api/admin/request-access` | Validates the database-backed administrator username/password and opens an HTTP-only session | Admin credentials; rate limited and lockout protected |
 | `GET` | `/api/admin/overview` | Returns user, active-job, source, and published-post totals | Admin session |
 | `GET` | `/api/admin/bot` | Returns schedule, source health, job totals, failures, and recent bot-run history | Admin session |
+| `GET` | `/api/admin/analytics` | Returns 30-day page, session, known-user, device, and active-time analytics | Admin session |
 | `GET` | `/api/admin/users` | Lists registered users, verification/login state, activity, applications, and resume summaries | Admin session |
 | `GET` | `/api/admin/resume/[userId]` | Decrypts and previews a user's stored resume file | Admin session; private/no-store response |
+| `GET` | `/api/admin/resume-json/[userId]` | Decrypts the validated structured resume JSON and ATS report | Admin session; private/no-store response |
 | `POST` | `/api/admin/manual-job` | Creates and publishes a normalized manual job record | Admin session |
 | `POST` | `/api/admin/cleanup-jobs` | Deletes imported jobs not seen for more than 30 days | Admin session |
 | `POST` | `/api/admin/run-bot` | Runs the bounded ingestion worker immediately and records its result | Admin session |
@@ -225,7 +231,8 @@ Set these only in Hostinger Environment variables. Do not place them in browser 
 - SQLite and the local JSON store remain the development fallback. Production uses MySQL/MariaDB for jobs and account-isolated private data.
 - MySQL schema bootstrap is non-destructive and uses `CREATE TABLE IF NOT EXISTS`. Run `npm run migrate:mysql` once to copy existing SQLite jobs and local state after configuring MySQL.
 - With accounts enabled, uploaded PDF/DOCX files are AES-256-GCM encrypted in `user_resume_files`. The complete extracted text, normalized resume JSON, and ATS report are independently encrypted in `user_resume_documents`; only authenticated private routes decrypt the structured view. Groq fields are schema-validated and carry evidence/confidence, but automated extraction must still be reviewed for important decisions. The ATS score is a compatibility estimate, not a guarantee that every employer system will parse or rank a resume identically.
-- Session tokens are random, stored only as SHA-256 hashes, and delivered in `HttpOnly`, `SameSite=Lax`, production `Secure` cookies. Passwords use Argon2id.
+- Session tokens are random, stored only as SHA-256 hashes, and delivered in `HttpOnly`, `SameSite=Lax`, production `Secure` cookies. New passwords use salted scrypt hashes; existing Argon2id hashes remain readable during migration.
+- First-party analytics stores page paths without query strings, page-view counts, device category, and bounded active-time signals. It does not record keystrokes, submitted form content, or third-party advertising identifiers.
 - Email verification and password-reset tokens are random, hashed in storage, expire, and can be used only once.
 - Interview camera frames stay in the browser. The API receives only optional numeric practice signals and never receives images or video.
 - Camera signals are coaching aids only and must not be used for hiring decisions or sensitive-trait inference.

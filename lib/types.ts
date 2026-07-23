@@ -136,6 +136,7 @@ export type ResumeMatchResult = {
   file: { name: string; type: string; size: number; charactersRead: number };
   analyzedAt: string;
   storedForAccount?: boolean;
+  processing?: { runId: string | null; durationMs: number; stages: string[] };
 };
 
 export type InterviewQuestion = {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { siteUrl } from "@/lib/site";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,7 +26,7 @@ export default async function RootLayout({
   await connection();
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><AnalyticsTracker/>{children}</body>
     </html>
   );
 }

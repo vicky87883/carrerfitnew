@@ -18,7 +18,8 @@ async function main() {
     consumeAuthToken, createAuthToken, createSession, createUser, createUserApplication, findSessionUser,
     getPrivateData, listUserApplications, markUserVerified, saveAssessmentMatches, saveResumeAnalysis,
   } = await import("../server/auth-store.js");
-  const { getResumeDocument, getResumeFile, saveResumeDocument, saveResumeFile } = await import("../server/resume-vault.js");
+  const { completeResumeAnalysisRun, createResumeAnalysisRun, getResumeDocument, getResumeFile, saveResumeDocument, saveResumeFile } = await import("../server/resume-vault.js");
+  const { getAdminAnalytics, recordAnalyticsEvent } = await import("../server/analytics.js");
   const { closeJobDatabaseForTests } = await import("../server/job-database.js");
   const { adminCredentialsValid, adminLoginConfigured, createAdminCookie } = await import("../server/admin-access.js");
 
@@ -36,6 +37,8 @@ async function main() {
   assert.match(createAdminCookie(), /HttpOnly/);
   const alice = await createUser("alice@example.com", "Alice Candidate", passwordHash);
   const bob = await createUser("bob@example.com", "Bob Candidate", passwordHash);
+  const analysisRun = await createResumeAnalysisRun(alice.id, "alice-resume.pdf");
+  await completeResumeAnalysisRun(analysisRun.id, { aiPowered: true, atsScore: 91, extractionConfidence: .94, processingMs: 4200 });
 
   const verify = createOneTimeToken();
   await createAuthToken(alice.id, "verify_email", verify.hash, new Date(Date.now() + 60_000).toISOString());
@@ -61,6 +64,13 @@ async function main() {
   assert.equal((await getResumeDocument(alice.id))?.document.identity.email, "alice@example.com");
   assert.equal(await getResumeFile(bob.id), null, "encrypted resume files must be isolated by user");
   assert.equal(await getResumeDocument(bob.id), null, "encrypted resume documents must be isolated by user");
+  await recordAnalyticsEvent({ sessionId: "11111111-1111-4111-8111-111111111111", userId: alice.id, path: "/resume", type: "page_view", durationMs: 0, device: "Desktop" });
+  await recordAnalyticsEvent({ sessionId: "11111111-1111-4111-8111-111111111111", userId: alice.id, path: "/resume", type: "engagement", durationMs: 15_000, device: "Desktop" });
+  const analytics = await getAdminAnalytics();
+  assert.equal(analytics.summary.sessions, 1);
+  assert.equal(analytics.summary.pageViews, 1);
+  assert.equal(analytics.pages[0]?.path, "/resume");
+  assert.equal(analytics.users[0]?.email, "alice@example.com");
 
   await createUserApplication(alice.id, "job-1");
   assert.equal((await listUserApplications(alice.id)).length, 1);

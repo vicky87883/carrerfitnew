@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { apiFailure, rateLimit, resumeFileFromForm } from "@/app/api/_utils";
 import type { AssessmentAnswers, CareerMatch, Job } from "@/lib/types";
-import { privateJson, requireVerifiedUser, validateMutationOrigin } from "@/server/auth";
+import { privateJson, requireVerifiedUser, sessionForRequest, validateMutationOrigin } from "@/server/auth";
+import { analyticsDevice, recordAnalyticsEvent } from "@/server/analytics";
 import { adminSession } from "@/server/admin-access";
 import {
   createUserApplication, deleteUserApplication, getPrivateData, listUserApplications,
@@ -17,7 +18,7 @@ import {
 } from "@/server/job-database";
 import { identifyJobSource, ScrapeError, scrapeJobSource, validateJobSourceUrl } from "@/server/job-scraper";
 import { extractResumeText } from "@/server/resume";
-import { getResumeDocument, saveResumeDocument, saveResumeFile } from "@/server/resume-vault";
+import { completeResumeAnalysisRun, createResumeAnalysisRun, failResumeAnalysisRun, getResumeDocument, saveResumeDocument, saveResumeFile } from "@/server/resume-vault";
 import { readStore, writeStore } from "@/server/store";
 
 export const runtime = "nodejs";
@@ -47,6 +48,7 @@ export async function POST(request: Request, context: Context) {
   try {
     const path = (await context.params).path;
     if (!["cron", "job-sources"].includes(path[0])) { const denied = validateMutationOrigin(request); if (denied) return denied; }
+    if (path[0] === "analytics" && path[1] === "event") return await analyticsEvent(request);
     if (path[0] === "resume" && path[1] === "analyze") return await analyzeResume(request);
     if (path[0] === "job-sources") {
       const denied = requireAdmin(request); if (denied) return denied;
@@ -124,12 +126,30 @@ async function analyzeResume(request: Request) {
   const auth = await requireVerifiedUser(request); if (auth.response) return auth.response;
   const form = await request.formData(); const file = await resumeFileFromForm(form.get("resume"));
   if (!file) return Response.json({ message: "Choose a PDF or DOCX resume to analyze." }, { status: 400 });
-  const text = await extractResumeText(file); const imported = await importedJobsOrEmpty({ limit: 80 });
-  const availableJobs = dedupeJobs([...jobs, ...imported.jobs]);
-  const analysis = await analyzeResumeWithGroq(text, availableJobs); const rankedJobs = hydrateRankedJobs(availableJobs, analysis);
-  const ats = analyzeAts(text, analysis.document);
-  if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file), saveResumeDocument(auth.user.id, text, analysis.document, ats)]);
-  return privateJson({ profile: analysis.profile, document: analysis.document, ats, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
+  const startedAt = Date.now(); const run = auth.user ? await createResumeAnalysisRun(auth.user.id, file.originalname) : null;
+  try {
+    const text = await extractResumeText(file); const [imported, priorResume] = await Promise.all([importedJobsOrEmpty({ limit: 80 }), auth.user ? getResumeDocument(auth.user.id) : Promise.resolve(null)]);
+    const availableJobs = dedupeJobs([...jobs, ...imported.jobs]);
+    const analysis = await analyzeResumeWithGroq(text, availableJobs, priorResume?.document); const rankedJobs = hydrateRankedJobs(availableJobs, analysis);
+    const ats = analyzeAts(text, analysis.document); const processingMs = Date.now() - startedAt;
+    if (auth.user) await Promise.all([saveResumeAnalysis(auth.user.id, analysis.profile, rankedJobs), saveResumeFile(auth.user.id, file), saveResumeDocument(auth.user.id, text, analysis.document, ats)]);
+    if (run) await completeResumeAnalysisRun(run.id, { aiPowered: analysis.aiPowered, atsScore: ats.score, extractionConfidence: analysis.document.extractionConfidence, processingMs });
+    return privateJson({ profile: analysis.profile, document: analysis.document, ats, jobs: rankedJobs, aiPowered: analysis.aiPowered, storedForAccount: Boolean(auth.user), databaseDegraded: imported.degraded, processing: { runId: run?.id || null, durationMs: processingMs, stages: ["Document parsed", "Career data extracted", "Fields validated", "ATS scored", "Jobs ranked", "Encrypted JSON stored"] }, file: { name: file.originalname, type: file.mimetype, size: file.size, charactersRead: text.length }, analyzedAt: new Date().toISOString() }, 201);
+  } catch (error) {
+    if (run) await failResumeAnalysisRun(run.id, error instanceof Error ? error.name : "analysis_error", Date.now() - startedAt);
+    throw error;
+  }
+}
+
+async function analyticsEvent(request: Request) {
+  const limited = rateLimit(request, "analytics", 240); if (limited) return new Response(null, { status: 204 });
+  const body = await request.json() as { sessionId?: unknown; path?: unknown; type?: unknown; durationMs?: unknown };
+  const sessionId = String(body.sessionId || ""); const path = String(body.path || "").split("?")[0].slice(0, 300);
+  const type = String(body.type || ""); const durationMs = Math.max(0, Math.min(60_000, Number(body.durationMs) || 0));
+  if (!/^[0-9a-f-]{36}$/i.test(sessionId) || !path.startsWith("/") || !["page_view", "engagement", "page_exit"].includes(type)) return new Response(null, { status: 204 });
+  const user = await sessionForRequest(request);
+  await recordAnalyticsEvent({ sessionId, userId: user?.id || null, path, type: type as "page_view" | "engagement" | "page_exit", durationMs, device: analyticsDevice(request.headers.get("user-agent")) });
+  return new Response(null, { status: 204 });
 }
 
 async function addSource(request: Request) {

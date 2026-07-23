@@ -7,6 +7,8 @@ import { runJobBot } from "@/server/job-bot";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { createHash, randomUUID } from "node:crypto";
 import { getResumeFile } from "@/server/resume-vault";
+import { getResumeDocument } from "@/server/resume-vault";
+import { getAdminAnalytics } from "@/server/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +20,10 @@ export async function GET(request: Request, context: Context) {
   if (!adminSession(request)) return privateJson({ message: "Administrator authentication is required." }, 401);
   if (path === "overview") return overview(request);
   if (path === "bot") return botStatus(request);
+  if (path === "analytics") return privateJson(await getAdminAnalytics());
   if (path === "users") return users(request);
   if (path === "resume" && parts[1]) return resumeFile(parts[1]);
+  if (path === "resume-json" && parts[1]) return resumeJson(parts[1]);
   return privateJson({ message: "Admin route not found." }, 404);
 }
 export async function POST(request: Request, context: Context) {
@@ -54,16 +58,26 @@ async function users(request: Request) {
   if (!adminSession(request)) return privateJson({ message: "Confirm an administrator sign-in first." }, 401);
   const mysqlQuery = `SELECT u.id,u.name,u.email,u.email_verified_at,u.last_login_at,u.created_at,p.updated_at AS private_updated_at,p.resume_profile,r.filename,r.size_bytes,r.uploaded_at,
     (SELECT COUNT(*) FROM user_applications a WHERE a.user_id=u.id) AS application_count,
+    (SELECT rr.status FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_status,
+    (SELECT rr.ai_powered FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_ai_powered,
+    (SELECT rr.ats_score FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_ats_score,
+    (SELECT rr.extraction_confidence FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_confidence,
+    (SELECT rr.processing_ms FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_processing_ms,
     EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id AND s.expires_at>UTC_TIMESTAMP(3)) AS logged_in
     FROM users u LEFT JOIN user_private_data p ON p.user_id=u.id LEFT JOIN user_resume_files r ON r.user_id=u.id ORDER BY COALESCE(u.last_login_at,u.created_at) DESC LIMIT 100`;
   const sqliteQuery = `SELECT u.id,u.name,u.email,u.email_verified_at,u.last_login_at,u.created_at,p.updated_at AS private_updated_at,p.resume_profile,r.filename,r.size_bytes,r.uploaded_at,
     (SELECT COUNT(*) FROM user_applications a WHERE a.user_id=u.id) AS application_count,
+    (SELECT rr.status FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_status,
+    (SELECT rr.ai_powered FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_ai_powered,
+    (SELECT rr.ats_score FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_ats_score,
+    (SELECT rr.extraction_confidence FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_confidence,
+    (SELECT rr.processing_ms FROM resume_analysis_runs rr WHERE rr.user_id=u.id ORDER BY rr.created_at DESC LIMIT 1) AS resume_processing_ms,
     EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id AND s.expires_at>datetime('now')) AS logged_in
     FROM users u LEFT JOIN user_private_data p ON p.user_id=u.id LEFT JOIN user_resume_files r ON r.user_id=u.id ORDER BY COALESCE(u.last_login_at,u.created_at) DESC LIMIT 100`;
   let rows: Array<RowDataPacket & Record<string, unknown>>;
   if (databaseBackend() === "mysql") [rows] = await (await getMysqlPool()).query<(RowDataPacket & Record<string, unknown>)[]>(mysqlQuery);
   else rows = getSqliteJobDatabase().prepare(sqliteQuery).all() as Array<RowDataPacket & Record<string, unknown>>;
-  return privateJson({ users: rows.map((row) => ({ id: String(row.id), name: String(row.name), email: String(row.email), verified: Boolean(row.email_verified_at), loggedIn: Boolean(row.logged_in), lastLoginAt: row.last_login_at || null, createdAt: row.created_at || null, lastActivityAt: row.private_updated_at || row.last_login_at || row.created_at || null, applications: Number(row.application_count || 0), resume: profileSummary(row.resume_profile), resumeFile: row.filename ? { filename: String(row.filename), size: Number(row.size_bytes || 0), uploadedAt: row.uploaded_at } : null })) });
+  return privateJson({ users: rows.map((row) => ({ id: String(row.id), name: String(row.name), email: String(row.email), verified: Boolean(row.email_verified_at), loggedIn: Boolean(row.logged_in), lastLoginAt: row.last_login_at || null, createdAt: row.created_at || null, lastActivityAt: row.private_updated_at || row.last_login_at || row.created_at || null, applications: Number(row.application_count || 0), resume: profileSummary(row.resume_profile), resumeFile: row.filename ? { filename: String(row.filename), size: Number(row.size_bytes || 0), uploadedAt: row.uploaded_at } : null, resumeProcessing: row.resume_status ? { status: String(row.resume_status), aiPowered: Boolean(row.resume_ai_powered), atsScore: Number(row.resume_ats_score || 0), confidence: Number(row.resume_confidence || 0), processingMs: Number(row.resume_processing_ms || 0) } : null })) });
 }
 async function botStatus(request: Request) {
   if (!adminSession(request)) return privateJson({ message: "Administrator authentication is required." }, 401);
@@ -82,6 +96,10 @@ function profileSummary(value: unknown) { try { const profile = typeof value ===
 async function resumeFile(userId: string) {
   const file = await getResumeFile(userId); if (!file) return privateJson({ message: "No stored resume file was found." }, 404);
   return new Response(file.data, { headers: { "Content-Type": file.mimeType, "Content-Length": String(file.size), "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`, "Cache-Control": "no-store, private", "X-Content-Type-Options": "nosniff" } });
+}
+async function resumeJson(userId: string) {
+  const value = await getResumeDocument(userId); if (!value) return privateJson({ message: "No structured resume JSON was found." }, 404);
+  return privateJson({ schema: "carrerfit.resume.v1", document: value.document, ats: value.ats, metadata: { wordCount: value.wordCount, characterCount: value.characterCount, analyzedAt: value.analyzedAt } });
 }
 
 async function manualJob(request: Request) {

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
 import type { AtsAnalysis, ResumeDocument } from "../lib/types.js";
 import { databaseBackend, getMysqlPool } from "./mysql.js";
@@ -6,6 +6,23 @@ import { getSqliteJobDatabase } from "./job-database.js";
 
 type ResumeRow = RowDataPacket & { filename: string; mime_type: string; size_bytes: number; encrypted_data: Buffer; iv: Buffer; auth_tag: Buffer; uploaded_at: string };
 type DocumentRow = RowDataPacket & { encrypted_document: Buffer; document_iv: Buffer; document_auth_tag: Buffer; encrypted_text: Buffer; text_iv: Buffer; text_auth_tag: Buffer; word_count: number; character_count: number; analyzed_at: string };
+
+export async function createResumeAnalysisRun(userId: string, filename: string) {
+  const run = { id: randomUUID(), createdAt: new Date().toISOString() };
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("INSERT INTO resume_analysis_runs (id,user_id,filename,status,created_at) VALUES (?,?,?,'Processing',?)", [run.id, userId, safeFilename(filename), mysqlDate(run.createdAt)]);
+  else { const db = getSqliteJobDatabase(); ensureSqlite(db); db.prepare("INSERT INTO resume_analysis_runs (id,user_id,filename,status,created_at) VALUES (?,?,?,'Processing',?)").run(run.id, userId, safeFilename(filename), run.createdAt); }
+  return run;
+}
+export async function completeResumeAnalysisRun(id: string, result: { aiPowered: boolean; atsScore: number; extractionConfidence: number; processingMs: number }) {
+  const completedAt = new Date().toISOString();
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("UPDATE resume_analysis_runs SET status='Completed',ai_powered=?,ats_score=?,extraction_confidence=?,processing_ms=?,completed_at=? WHERE id=?", [result.aiPowered ? 1 : 0, result.atsScore, result.extractionConfidence, result.processingMs, mysqlDate(completedAt), id]);
+  else { const db = getSqliteJobDatabase(); ensureSqlite(db); db.prepare("UPDATE resume_analysis_runs SET status='Completed',ai_powered=?,ats_score=?,extraction_confidence=?,processing_ms=?,completed_at=? WHERE id=?").run(result.aiPowered ? 1 : 0, result.atsScore, result.extractionConfidence, result.processingMs, completedAt, id); }
+}
+export async function failResumeAnalysisRun(id: string, errorCode: string, processingMs: number) {
+  const completedAt = new Date().toISOString();
+  if (databaseBackend() === "mysql") await (await getMysqlPool()).execute("UPDATE resume_analysis_runs SET status='Failed',error_code=?,processing_ms=?,completed_at=? WHERE id=?", [errorCode.slice(0, 80), processingMs, mysqlDate(completedAt), id]);
+  else { const db = getSqliteJobDatabase(); ensureSqlite(db); db.prepare("UPDATE resume_analysis_runs SET status='Failed',error_code=?,processing_ms=?,completed_at=? WHERE id=?").run(errorCode.slice(0, 80), processingMs, completedAt, id); }
+}
 
 export async function saveResumeFile(userId: string, file: { originalname: string; mimetype: string; size: number; buffer: Buffer }) {
   const key = vaultKey(); const iv = randomBytes(12); const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -58,7 +75,9 @@ function decrypt(data: Buffer, iv: Buffer, tag: Buffer) { const decipher = creat
 function safeFilename(value: string) { return value.replace(/[\r\n"\\/]/g, "_").slice(0, 255) || "resume"; }
 function ensureSqlite(db: ReturnType<typeof getSqliteJobDatabase>) { db.exec(`
   CREATE TABLE IF NOT EXISTS user_resume_files (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,filename TEXT NOT NULL,mime_type TEXT NOT NULL,size_bytes INTEGER NOT NULL,encrypted_data BLOB NOT NULL,iv BLOB NOT NULL,auth_tag BLOB NOT NULL,uploaded_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS user_resume_documents (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,encrypted_document BLOB NOT NULL,document_iv BLOB NOT NULL,document_auth_tag BLOB NOT NULL,encrypted_text BLOB NOT NULL,text_iv BLOB NOT NULL,text_auth_tag BLOB NOT NULL,word_count INTEGER NOT NULL,character_count INTEGER NOT NULL,analyzed_at TEXT NOT NULL)
+  CREATE TABLE IF NOT EXISTS user_resume_documents (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,encrypted_document BLOB NOT NULL,document_iv BLOB NOT NULL,document_auth_tag BLOB NOT NULL,encrypted_text BLOB NOT NULL,text_iv BLOB NOT NULL,text_auth_tag BLOB NOT NULL,word_count INTEGER NOT NULL,character_count INTEGER NOT NULL,analyzed_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS resume_analysis_runs (id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,filename TEXT NOT NULL,status TEXT NOT NULL,ai_powered INTEGER,ats_score INTEGER,extraction_confidence REAL,processing_ms INTEGER,error_code TEXT,created_at TEXT NOT NULL,completed_at TEXT);
+  CREATE INDEX IF NOT EXISTS resume_runs_user_idx ON resume_analysis_runs(user_id,created_at);
 `); }
 function mysqlDate(value: string) { return new Date(value).toISOString().slice(0, 23).replace("T", " "); }
 function iso(value: string) { return value.includes("T") ? value : `${value.replace(" ", "T")}Z`; }

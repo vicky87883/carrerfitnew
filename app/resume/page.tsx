@@ -21,7 +21,7 @@ import AppNav from "../../components/AppNav";
 import { api } from "../../lib/api";
 import type { ResumeMatchResult } from "../../lib/types";
 
-type Stage = "idle" | "reading" | "analyzing" | "matching" | "done";
+type Stage = "idle" | "reading" | "analyzing" | "validating" | "matching" | "done";
 const loadingCopy = {
   reading: [
     "Reading your resume",
@@ -29,7 +29,11 @@ const loadingCopy = {
   ],
   analyzing: [
     "Building your career profile",
-    "Understanding strengths and transferable experience",
+    "The AI is mapping roles, achievements, skills, and education",
+  ],
+  validating: [
+    "Validating extracted evidence",
+    "Checking every structured field before encrypted JSON storage",
   ],
   matching: [
     "Ranking live opportunities",
@@ -48,7 +52,7 @@ export default function ResumePage() {
 
   useEffect(() => {
     if (!busy) return;
-    const states: Stage[] = ["reading", "analyzing", "matching"];
+    const states: Stage[] = ["reading", "analyzing", "validating", "matching"];
     const timer = window.setInterval(
       () =>
         setStage((current) => {
@@ -57,7 +61,7 @@ export default function ResumePage() {
             ? states[index + 1]
             : current;
         }),
-      1700,
+      1500,
     );
     return () => window.clearInterval(timer);
   }, [busy]);
@@ -86,11 +90,14 @@ export default function ResumePage() {
     setStage("reading");
     const body = new FormData();
     body.append("resume", file);
+    const visibleStartedAt = Date.now();
     try {
       const data = await api<ResumeMatchResult>("/api/resume/analyze", {
         method: "POST",
         body,
       });
+      const remaining = Math.max(0, 6200 - (Date.now() - visibleStartedAt));
+      if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
       setResult(data);
       setStage("done");
     } catch (err) {
@@ -128,9 +135,9 @@ export default function ResumePage() {
           <h1>{title}</h1>
           <p>{copy}</p>
           <div className="analysisSteps">
-            {(["reading", "analyzing", "matching"] as Stage[]).map(
+            {(["reading", "analyzing", "validating", "matching"] as Stage[]).map(
               (item, index) => {
-                const current = ["reading", "analyzing", "matching"].indexOf(
+                const current = ["reading", "analyzing", "validating", "matching"].indexOf(
                   stage,
                 );
                 return (
@@ -156,7 +163,9 @@ export default function ResumePage() {
                         ? "Parse document"
                         : item === "analyzing"
                           ? "Understand profile"
-                          : "Rank opportunities"}
+                          : item === "validating"
+                            ? "Validate JSON"
+                            : "Rank opportunities"}
                     </strong>
                   </div>
                 );

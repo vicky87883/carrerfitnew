@@ -161,6 +161,32 @@ async function ensureMysqlSchema(target: Pool) {
         finished_at DATETIME(3) NULL,
         KEY job_bot_runs_started_idx (started_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS analytics_sessions (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NULL,
+        device_type VARCHAR(20) NOT NULL,
+        started_at DATETIME(3) NOT NULL,
+        last_seen_at DATETIME(3) NOT NULL,
+        total_duration_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        page_views INT UNSIGNED NOT NULL DEFAULT 0,
+        KEY analytics_sessions_user_idx (user_id,last_seen_at),
+        KEY analytics_sessions_seen_idx (last_seen_at),
+        CONSTRAINT analytics_sessions_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS analytics_events (
+        id VARCHAR(36) PRIMARY KEY,
+        session_id VARCHAR(36) NOT NULL,
+        user_id VARCHAR(36) NULL,
+        path VARCHAR(300) NOT NULL,
+        event_type VARCHAR(24) NOT NULL,
+        duration_ms INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL,
+        KEY analytics_events_path_idx (path,created_at),
+        KEY analytics_events_session_idx (session_id,created_at),
+        KEY analytics_events_user_idx (user_id,created_at),
+        CONSTRAINT analytics_events_session_fk FOREIGN KEY (session_id) REFERENCES analytics_sessions(id) ON DELETE CASCADE,
+        CONSTRAINT analytics_events_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS auth_tokens (
         token_hash CHAR(64) PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
@@ -202,6 +228,22 @@ async function ensureMysqlSchema(target: Pool) {
         character_count INT UNSIGNED NOT NULL,
         analyzed_at DATETIME(3) NOT NULL,
         CONSTRAINT user_resume_documents_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS resume_analysis_runs (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        status VARCHAR(24) NOT NULL,
+        ai_powered TINYINT(1) NULL,
+        ats_score INT UNSIGNED NULL,
+        extraction_confidence DECIMAL(5,4) NULL,
+        processing_ms INT UNSIGNED NULL,
+        error_code VARCHAR(80) NULL,
+        created_at DATETIME(3) NOT NULL,
+        completed_at DATETIME(3) NULL,
+        KEY resume_runs_user_idx (user_id,created_at),
+        KEY resume_runs_status_idx (status,created_at),
+        CONSTRAINT resume_runs_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await connection.query(`CREATE TABLE IF NOT EXISTS user_applications (
         id VARCHAR(36) PRIMARY KEY,
